@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌳 Ultimate Family Tree</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f1f5f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+        }
+        #canvas-container:active { cursor: grabbing; }
+        
+        #workspace {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            transform-origin: 0 0;
+        }
+
+        .person-card {
+            position: absolute;
+            width: 120px;
+            height: 145px;
+            background: white;
+            border-radius: 16px;
+            padding: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            cursor: grab;
+            user-select: none;
+            border: 2px solid transparent;
+            z-index: 10;
+        }
+        .person-card:active { z-index: 50; }
+        .person-card.male { border-color: #bfdbfe; background: #eff6ff; }
+        .person-card.female { border-color: #fecdd3; background: #fff1f2; }
+        
+        .person-card.selected { 
+            border-color: #f59e0b; 
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.4), 0 10px 15px -3px rgba(0,0,0,0.2); 
+            z-index: 40;
+        }
+
+        .profile-img {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            pointer-events: none;
+            flex-shrink: 0;
+        }
+
+        #lines-svg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 1;
+        }
+
+        #selection-box {
+            position: absolute;
+            border: 2px dashed #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+            pointer-events: none;
+            z-index: 999;
+            display: none;
+        }
+
+        #print-selection-box {
+            position: absolute;
+            border: 3px dashed #ef4444;
+            background-color: rgba(239, 68, 68, 0.1);
+            pointer-events: none;
+            z-index: 999;
+            display: none;
+        }
+
+        #control-panel {
+            position: fixed;
+            top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 10px 20px;
+            border-radius: 999px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: max-content;
+            max-width: 95vw;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body, html { 
+                width: 1122px !important; 
+                height: 793px !important; 
+                background: white !important; 
+                overflow: hidden !important; 
+                margin: 0; padding: 0; 
+            }
+            @page { size: landscape; margin: 0; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            
+            #canvas-container { width: 1122px; height: 793px; position: absolute; left: 0; top: 0; transform: none !important; }
+            #workspace { 
+                transform: matrix(var(--print-scale, 1), 0, 0, var(--print-scale, 1), var(--print-pan-x, 0), var(--print-pan-y, 0)) !important; 
+                transform-origin: 0 0 !important; 
+            }
+            .person-card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="control-panel" class="no-print border border-gray-200">
+        <button onclick="addPerson()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-full shadow transition text-sm">➕ Add</button>
+        
+        <div class="w-px bg-gray-300 h-6 mx-1"></div>
+        <button onclick="startLinking('spouse')" class="bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm">🔗 Spouse</button>
+        <button onclick="actionSiblingLink()" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm">🔗 Sibling</button>
+        <button onclick="startLinking('child')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm">🔗 Child</button>
+        <button onclick="startLinking('delete')" class="bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm">✂️ Unlink</button>
+        
+        <div class="w-px bg-gray-300 h-6 mx-1"></div>
+        <span class="text-xs font-bold text-gray-400">Selected:</span>
+        <button onclick="alignSelectedRow()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm" title="Align Y (Height)">↕️ Align</button>
+        <button onclick="distributeSelectedX()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm" title="Distribute X (Spacing)">↔️ Space</button>
+        <button onclick="resizeSelected(0.1)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm" title="Increase Size">➕ Size</button>
+        <button onclick="resizeSelected(-0.1)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-3 rounded-full shadow-sm transition text-sm" title="Decrease Size">➖ Size</button>
+
+        <div class="w-px bg-gray-300 h-6 mx-1"></div>
+        <button onclick="exportData()" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-3 rounded-full shadow transition text-sm">💾 Save</button>
+        <button onclick="importData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded-full shadow transition text-sm">📂 Load</button>
+        
+        <div class="w-px bg-gray-300 h-6 mx-1"></div>
+        <button onclick="startDragPrint()" id="btn-print" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-full shadow transition text-sm">🖨️ Print Area</button>
+    </div>
+
+    <div id="status-message" class="fixed top-20 left-1/2 transform -translate-x-1/2 w-full text-center text-amber-600 font-bold z-50 pointer-events-none drop-shadow-md text-lg bg-white/90 border border-amber-200 rounded-full px-6 py-2 w-max mx-auto hidden transition-all"></div>
+
+    <div id="print-confirm-ui" class="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 no-print bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
+        <div class="text-gray-700 font-bold mr-2">Print area selected.</div>
+        <button onclick="cancelPrint()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">Cancel</button>
+        <button onclick="executePrint()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">Print!</button>
+    </div>
+
+    <div id="canvas-container">
+        <div id="selection-box"></div>
+        <div id="print-selection-box">
+            <div class="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-4 py-1.5 rounded-full text-sm shadow-md whitespace-nowrap">
+                📸 The area inside this box will be printed
+            </div>
+        </div>
+        
+        <div id="workspace">
+            <svg id="lines-svg"></svg>
+            <div id="nodes-container"></div>
+        </div>
+    </div>
+
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/60 z-[300] flex justify-center items-center backdrop-blur-sm no-print">
+        <div class="bg-white rounded-2xl p-6 w-80 shadow-2xl">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                Profile Edit
+                <button onclick="triggerModalPhotoUpload()" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition">📸 Photo</button>
+            </h3>
+            <input type="text" id="edit-name" class="w-full border-gray-300 rounded-lg p-2 border focus:ring-2 focus:ring-indigo-500 mb-3" placeholder="Name">
+            <input type="text" id="edit-birth" class="w-full border-gray-300 rounded-lg p-2 border focus:ring-2 focus:ring-indigo-500 mb-3" placeholder="Birth Year (e.g. 1985)">
+            <select id="edit-gender" class="w-full border-gray-300 rounded-lg p-2 border focus:ring-2 focus:ring-indigo-500 mb-6">
+                <option value="M">👨 Male</option>
+                <option value="F">👩 Female</option>
+            </select>
+            <div class="flex justify-between">
+                <button onclick="deletePerson()" class="text-red-500 hover:text-red-700 font-bold px-3 py-2 text-sm bg-red-50 rounded-lg transition">🗑️ Delete</button>
+                <div class="flex gap-2">
+                    <button onclick="closeModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition">Cancel</button>
+                    <button onclick="saveModal()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="img-upload" accept="image/*" class="hidden">
+
+    <script>
+        // --- Core Data ---
+        let persons = {}; 
+        let links = [];   
+        let idCounter = 1;
+
+        // --- View & State ---
+        let panX = 0, panY = 0; 
+        let scale = 1;
+        
+        let linkMode = null; 
+        let linkStepId = null;
+
+        let selectedNodeIds = new Set();
+        
+        let dragMode = null; 
+        let startX, startY;
+        let originalPositions = {}; 
+        let selectionRect = { x1: 0, y1: 0, x2: 0, y2: 0 };
+        let printRect = { x: 0, y: 0, w: 0, h: 0 };
+
+        let lastClickTime = 0;
+        let lastClickId = null;
+
+        const container = document.getElementById('canvas-container');
+        const workspace = document.getElementById('workspace');
+        const nodesContainer = document.getElementById('nodes-container');
+        const linesSvg = document.getElementById('lines-svg');
+        const statusMsg = document.getElementById('status-message');
+        const selBox = document.getElementById('selection-box');
+        const printBox = document.getElementById('print-selection-box');
+
+        function showMsg(text) {
+            if(!text) { statusMsg.classList.add('hidden'); return; }
+            statusMsg.innerText = text;
+            statusMsg.classList.remove('hidden');
+        }
+
+        // --- 💡 실시간 관계 스캔을 통한 완벽한 자녀 라우팅 및 고정 로직 ---
+        function getEffectiveParentGroups() {
+            // 1. 모든 부부 관계 스캔 (Undirected Graph)
+            let spouseMap = {};
+            Object.keys(persons).forEach(id => spouseMap[id] = new Set());
+            links.filter(l => l.type === 'spouse').forEach(l => {
+                if(spouseMap[l.sourceId]) spouseMap[l.sourceId].add(l.targetId.toString());
+                if(spouseMap[l.targetId]) spouseMap[l.targetId].add(l.sourceId.toString());
+            });
+
+            // 2. 각 자녀별로 "실질적인 부모(직접 연결된 부모 + 그 배우자)" 도출
+            let childToEffectiveParents = {};
+            links.filter(l => l.type === 'child').forEach(l => {
+                let cid = l.targetId.toString();
+                let pid = l.sourceId.toString();
+                if(!childToEffectiveParents[cid]) childToEffectiveParents[cid] = new Set();
+                
+                childToEffectiveParents[cid].add(pid);
+                // 해당 부모의 모든 배우자도 이 자녀의 실질적 부모로 강제 합류!
+                spouseMap[pid].forEach(spId => childToEffectiveParents[cid].add(spId));
+            });
+
+            // 3. 완전히 똑같은 실질적 부모를 가진 자녀들을 하나의 그룹으로 묶기
+            let parentGroups = {};
+            for(let cid in childToEffectiveParents) {
+                let pidsStr = Array.from(childToEffectiveParents[cid]).sort((a,b) => a-b).join(',');
+                if(!parentGroups[pidsStr]) parentGroups[pidsStr] = [];
+                parentGroups[pidsStr].push(parseInt(cid));
+            }
+            return parentGroups;
+        }
+
+        // 마우스를 놓았을 때, 외동자녀를 부모 정중앙에 락(Lock) 시킵니다.
+        function enforceConstraints() {
+            let parentGroups = getEffectiveParentGroups();
+
+            for(let pidsStr in parentGroups) {
+                let cids = parentGroups[pidsStr];
+                // 💡 자녀가 1명일 경우 강제 중앙 정렬
+                if (cids.length === 1) {
+                    let pids = pidsStr.split(',').map(Number);
+                    let sumX = 0, validP = 0;
+                    pids.forEach(pid => {
+                        if(persons[pid]) { sumX += persons[pid].x + 60; validP++; }
+                    });
+                    if (validP > 0) {
+                        let pMidX = sumX / validP;
+                        persons[cids[0]].x = pMidX - 60; 
+                    }
+                }
+            }
+        }
+
+        // --- Render ---
+        function renderAll() {
+            // 렌더링 직전에 좌표 오차를 잡아줍니다.
+            if (dragMode !== 'node') { enforceConstraints(); }
+
+            nodesContainer.innerHTML = '';
+            Object.values(persons).forEach(p => {
+                const div = document.createElement('div');
+                div.className = `person-card ${p.gender === 'M' ? 'male' : 'female'} ${selectedNodeIds.has(p.id) ? 'selected' : ''}`;
+                
+                let cardScale = p.cardScale || 1;
+                div.style.left = p.x + 'px';
+                div.style.top = p.y + 'px';
+                div.style.transform = `scale(${cardScale})`;
+                div.style.transformOrigin = 'top center';
+                div.id = `node-${p.id}`;
+
+                let emoji = p.gender === 'M' ? '👨' : '👩';
+                let avatar = p.photo 
+                    ? `<img src="${p.photo}" class="profile-img">`
+                    : `<div class="text-4xl mt-1 pointer-events-none">${emoji}</div>`;
+                
+                let birthHtml = p.birth ? `<div class="text-[11px] text-gray-500 font-medium mt-1 pointer-events-none">${p.birth}</div>` : '';
+
+                div.innerHTML = `
+                    <div class="relative w-full flex flex-col items-center pointer-events-none h-full">
+                        ${avatar}
+                        <div class="font-bold text-gray-800 text-sm mt-3 text-center w-full truncate pointer-events-none">${p.name}</div>
+                        ${birthHtml}
+                    </div>
+                `;
+
+                div.onmousedown = (e) => handleNodeMouseDown(e, p.id);
+                nodesContainer.appendChild(div);
+            });
+            drawLines();
+            updateTransform();
+        }
+
+        function drawLines() {
+            let svgContent = '';
+            
+            // 1. Spouse Links + Heart
+            let spouseLinks = links.filter(l => l.type === 'spouse');
+            spouseLinks.forEach(link => {
+                let p1 = persons[link.sourceId], p2 = persons[link.targetId];
+                if(p1 && p2) {
+                    let cx1 = p1.x + 60, cy1 = p1.y + 45, cx2 = p2.x + 60, cy2 = p2.y + 45;
+                    svgContent += `<line x1="${cx1}" y1="${cy1}" x2="${cx2}" y2="${cy2}" stroke="#f472b6" stroke-width="4" stroke-dasharray="8 8" />`;
+                    svgContent += `<text x="${(cx1+cx2)/2}" y="${(cy1+cy2)/2 - 15}" fill="#f472b6" font-size="16" font-weight="bold" text-anchor="middle" dominant-baseline="central">💖</text>`;
+                }
+            });
+
+            // 2. Sibling Links
+            let siblingLinks = links.filter(l => l.type === 'sibling');
+            siblingLinks.forEach(link => {
+                let p1 = persons[link.sourceId], p2 = persons[link.targetId];
+                if(p1 && p2) {
+                    let cx1 = p1.x + 60, cy1 = p1.y + 45, cx2 = p2.x + 60, cy2 = p2.y + 45;
+                    let midX = (cx1+cx2)/2;
+                    let archY = Math.min(cy1, cy2) - 60;
+                    svgContent += `<path d="M ${cx1} ${cy1} Q ${midX} ${archY} ${cx2} ${cy2}" stroke="#fbbf24" stroke-width="3" stroke-dasharray="6 6" fill="none" />`;
+                }
+            });
+
+            // 3. 실시간 분석 그룹 기반의 자녀 선 그리기 (완벽한 포크선)
+            let parentGroups = getEffectiveParentGroups();
+
+            for(let pidsStr in parentGroups) {
+                let cids = parentGroups[pidsStr];
+                let pids = pidsStr.split(',').map(Number);
+                
+                let sumX = 0, sumY = 0, validP = 0;
+                let lowestParentY = 0; 
+
+                pids.forEach(pid => {
+                    if(persons[pid]) { 
+                        sumX += persons[pid].x + 60; 
+                        sumY += persons[pid].y + 45; 
+                        lowestParentY = Math.max(lowestParentY, persons[pid].y + 145);
+                        validP++; 
+                    }
+                });
+                if(validP === 0) continue;
+                
+                let pMidX = sumX / validP;
+                // 💡 부모가 1명일 때는 얼굴을 가리지 않게 카드 바닥에서 선 시작
+                let pMidY = (validP === 1) ? lowestParentY : (sumY / validP);
+
+                let childCoords = cids.map(cid => persons[cid] ? {x: persons[cid].x + 60, y: persons[cid].y} : null).filter(Boolean);
+                if(childCoords.length === 0) continue;
+
+                let minCX = Math.min(...childCoords.map(c => c.x));
+                let maxCX = Math.max(...childCoords.map(c => c.x));
+                let minCY = Math.min(...childCoords.map(c => c.y));
+                
+                // 💡 자녀 바로 위(30px)에서 가로 꺾임. 
+                let dropY = minCY - 30; 
+                if (dropY <= pMidY) dropY = pMidY + 20;
+
+                // 중앙 메인 줄기
+                svgContent += `<path d="M ${pMidX} ${pMidY} L ${pMidX} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
+                
+                // 가로 척추 선
+                let spineMin = Math.min(pMidX, minCX);
+                let spineMax = Math.max(pMidX, maxCX);
+                if (spineMin !== spineMax) {
+                    svgContent += `<path d="M ${spineMin} ${dropY} L ${spineMax} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
+                }
+                
+                // 자녀 머리로 꽂히는 선
+                childCoords.forEach(c => {
+                    svgContent += `<path d="M ${c.x} ${dropY} L ${c.x} ${c.y}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
+                });
+            }
+
+            linesSvg.innerHTML = svgContent;
+        }
+
+        function updateTransform() {
+            workspace.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        }
+
+        function addPerson() {
+            let screenCenterX = window.innerWidth / 2;
+            let screenCenterY = window.innerHeight / 2;
+            if (isNaN(screenCenterX) || screenCenterX === 0) screenCenterX = 400;
+            if (isNaN(screenCenterY) || screenCenterY === 0) screenCenterY = 300;
+
+            let cx = (screenCenterX - panX) / scale - 60;
+            let cy = (screenCenterY - panY) / scale - 45;
+            cx += (Math.random() - 0.5) * 60;
+            cy += (Math.random() - 0.5) * 60;
+
+            persons[idCounter] = { id: idCounter, name: "New Person", gender: "M", photo: null, birth: "", cardScale: 1, x: cx, y: cy };
+            selectedNodeIds.clear();
+            selectedNodeIds.add(idCounter);
+            idCounter++;
+            renderAll();
+        }
+
+        function handleNodeMouseDown(e, id) {
+            e.stopPropagation(); 
+            
+            // 더블클릭 안정화 (300ms 이내 재클릭 시 모달 팝업)
+            let now = Date.now();
+            if (lastClickId === id && (now - lastClickTime) < 300) {
+                openModal(id);
+                return;
+            }
+            lastClickTime = now;
+            lastClickId = id;
+
+            if (linkMode) {
+                if (!linkStepId) {
+                    linkStepId = id;
+                    if(linkMode === 'delete') showMsg("✂️ Select the second person to REMOVE the link.");
+                    else showMsg("🔗 Select the second person to connect.");
+                    renderAll(); 
+                } else {
+                    if (linkStepId !== id) {
+                        if (linkMode === 'delete') {
+                            links = links.filter(l => !( (l.sourceId === linkStepId && l.targetId === id) || (l.targetId === linkStepId && l.sourceId === id) ));
+                        } else {
+                            // 💡 스마트 순서 역전 (Auto-Swap): 자녀를 먼저 클릭했더라도 카드의 높이(Y)를 비교해 위쪽 카드를 무조건 부모로 인식!
+                            let source = linkStepId;
+                            let target = id;
+                            if (linkMode === 'child' && persons[source].y > persons[target].y) {
+                                source = id;
+                                target = linkStepId;
+                            }
+
+                            // 중복 추가 방지
+                            let exists = links.some(l => l.type === linkMode && ((l.sourceId === source && l.targetId === target) || (l.targetId === source && l.sourceId === target)));
+                            if (!exists) {
+                                links.push({ sourceId: source, targetId: target, type: linkMode });
+                            }
+                        }
+                    }
+                    cancelLinking();
+                }
+                return;
+            }
+            if(dragMode === 'print') return;
+
+            if(!e.shiftKey && !selectedNodeIds.has(id)) {
+                selectedNodeIds.clear();
+                selectedNodeIds.add(id);
+                renderAll();
+            }
+
+            dragMode = 'node';
+            startX = e.clientX / scale;
+            startY = e.clientY / scale;
+            
+            originalPositions = {};
+            selectedNodeIds.forEach(nId => {
+                originalPositions[nId] = { x: persons[nId].x, y: persons[nId].y };
+            });
+        }
+
+        container.onmousedown = (e) => {
+            if (linkMode) { cancelLinking(); return; }
+            
+            if (dragMode === 'print') {
+                startX = e.clientX; startY = e.clientY;
+                printBox.style.left = startX + 'px';
+                printBox.style.top = startY + 'px';
+                printBox.style.width = '0px';
+                printBox.style.height = '0px';
+                printBox.style.display = 'block';
+                return;
+            }
+
+            if (e.shiftKey) { 
+                dragMode = 'select';
+                startX = e.clientX; startY = e.clientY;
+                selectionRect = { x1: startX, y1: startY, x2: startX, y2: startY };
+                selBox.style.left = startX + 'px'; selBox.style.top = startY + 'px';
+                selBox.style.width = '0px'; selBox.style.height = '0px';
+                selBox.style.display = 'block';
+            } else { 
+                dragMode = 'canvas';
+                startX = e.clientX - panX;
+                startY = e.clientY - panY;
+                selectedNodeIds.clear(); 
+                renderAll();
+            }
+        };
+
+        window.onmousemove = (e) => {
+            if (dragMode === 'node') {
+                let dx = e.clientX / scale - startX;
+                let dy = e.clientY / scale - startY;
+                selectedNodeIds.forEach(nId => {
+                    persons[nId].x = originalPositions[nId].x + dx;
+                    persons[nId].y = originalPositions[nId].y + dy;
+                    document.getElementById(`node-${nId}`).style.left = persons[nId].x + 'px';
+                    document.getElementById(`node-${nId}`).style.top = persons[nId].y + 'px';
+                });
+                drawLines(); 
+            } else if (dragMode === 'canvas') {
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                updateTransform();
+            } else if (dragMode === 'select' || dragMode === 'print') {
+                let box = dragMode === 'select' ? selBox : printBox;
+                let currentX = e.clientX;
+                let currentY = e.clientY;
+                
+                let x = Math.min(startX, currentX);
+                let y = Math.min(startY, currentY);
+                let w = Math.abs(currentX - startX);
+                let h = dragMode === 'print' ? w / 1.4142 : Math.abs(currentY - startY); 
+                
+                box.style.left = x + 'px'; box.style.top = y + 'px';
+                box.style.width = w + 'px'; box.style.height = h + 'px';
+                
+                if(dragMode === 'select') selectionRect = { x1: x, y1: y, x2: x+w, y2: y+h };
+                if(dragMode === 'print') printRect = { x, y, w, h };
+            }
+        };
+
+        window.onmouseup = () => {
+            if (dragMode === 'node') {
+                // 드래그가 끝난 후 정렬을 강제하기 위해 renderAll 재호출
+                renderAll();
+            } else if (dragMode === 'select') {
+                selBox.style.display = 'none';
+                selectedNodeIds.clear();
+                Object.values(persons).forEach(p => {
+                    let screenX = p.x * scale + panX;
+                    let screenY = p.y * scale + panY;
+                    let screenW = 120 * scale;
+                    let screenH = 145 * scale;
+                    let cx = screenX + screenW/2;
+                    let cy = screenY + screenH/2;
+                    if(cx >= selectionRect.x1 && cx <= selectionRect.x2 && cy >= selectionRect.y1 && cy <= selectionRect.y2) {
+                        selectedNodeIds.add(p.id);
+                    }
+                });
+                renderAll();
+            } else if (dragMode === 'print') {
+                if (printRect.w > 50 && printRect.h > 50) {
+                    document.getElementById('print-confirm-ui').classList.remove('hidden');
+                } else {
+                    cancelPrint();
+                }
+            }
+            dragMode = null;
+        };
+
+        container.onwheel = (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            scale = Math.min(Math.max(0.1, scale * delta), 3); 
+            updateTransform();
+        };
+
+        function alignSelectedRow() {
+            if(selectedNodeIds.size < 2) { alert("Please select 2 or more people (Shift + Drag)."); return; }
+            let sumY = 0;
+            selectedNodeIds.forEach(id => sumY += persons[id].y);
+            let avgY = sumY / selectedNodeIds.size;
+            selectedNodeIds.forEach(id => persons[id].y = avgY);
+            renderAll();
+        }
+
+        function distributeSelectedX() {
+            if(selectedNodeIds.size < 3) { alert("Please select 3 or more people (Shift + Drag)."); return; }
+            let arr = Array.from(selectedNodeIds).map(id => persons[id]).sort((a, b) => a.x - b.x);
+            let minX = arr[0].x;
+            let maxX = arr[arr.length-1].x;
+            let step = (maxX - minX) / (arr.length - 1);
+            
+            for(let i = 1; i < arr.length - 1; i++) {
+                arr[i].x = minX + (step * i);
+            }
+            renderAll();
+        }
+
+        function resizeSelected(delta) {
+            if(selectedNodeIds.size === 0) { alert("Please select people to resize."); return; }
+            selectedNodeIds.forEach(id => {
+                let current = persons[id].cardScale || 1;
+                persons[id].cardScale = Math.max(0.4, Math.min(2.0, current + delta));
+            });
+            renderAll();
+        }
+
+        function actionSiblingLink() {
+            if (selectedNodeIds.size >= 2) {
+                let arr = Array.from(selectedNodeIds);
+                for(let i=0; i<arr.length-1; i++) {
+                    let exists = links.some(l => (l.sourceId === arr[i] && l.targetId === arr[i+1]) || (l.targetId === arr[i] && l.sourceId === arr[i+1]));
+                    if (!exists) links.push({ sourceId: arr[i], targetId: arr[i+1], type: 'sibling' });
+                }
+                renderAll();
+            } else {
+                startLinking('sibling');
+            }
+        }
+
+        function startLinking(type) {
+            linkMode = type;
+            linkStepId = null;
+            selectedNodeIds.clear(); 
+            renderAll();
+            document.body.style.cursor = 'crosshair';
+            if(type === 'delete') showMsg("✂️ Delete Mode: Click the first person.");
+            else if(type === 'spouse') showMsg("🔗 Click Husband, then click Wife.");
+            else if(type === 'sibling') showMsg("🔗 Click Sibling 1, then Sibling 2. (Or select multiple and click Sibling button!)");
+            else if(type === 'child') showMsg("🔗 Click ONE Parent, then click Child. (Spouse will be linked automatically!)");
+        }
+        
+        function cancelLinking() {
+            linkMode = null; linkStepId = null;
+            document.body.style.cursor = 'default';
+            showMsg("");
+            renderAll();
+        }
+
+        function openModal(id) {
+            if (dragMode === 'print' || printBox.style.display === 'block') return;
+            editTargetId = id;
+            document.getElementById('edit-name').value = persons[id].name;
+            document.getElementById('edit-birth').value = persons[id].birth || "";
+            document.getElementById('edit-gender').value = persons[id].gender;
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+
+        function saveModal() {
+            if (editTargetId) {
+                persons[editTargetId].name = document.getElementById('edit-name').value || "Unknown";
+                persons[editTargetId].birth = document.getElementById('edit-birth').value;
+                persons[editTargetId].gender = document.getElementById('edit-gender').value;
+            }
+            closeModal();
+            renderAll();
+        }
+
+        function deletePerson() {
+            if(confirm("Are you sure you want to delete this person?")) {
+                delete persons[editTargetId];
+                links = links.filter(l => l.sourceId !== editTargetId && l.targetId !== editTargetId);
+                selectedNodeIds.delete(editTargetId);
+                closeModal();
+                renderAll();
+            }
+        }
+
+        function triggerModalPhotoUpload() {
+            const input = document.getElementById('img-upload');
+            input.onchange = (ev) => {
+                if (ev.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => { 
+                        if(editTargetId) { persons[editTargetId].photo = e.target.result; renderAll(); }
+                    };
+                    reader.readAsDataURL(ev.target.files[0]);
+                }
+                input.value = ''; 
+            };
+            input.click();
+        }
+
+        function exportData() {
+            const data = JSON.stringify({ persons, links, idCounter });
+            const blob = new Blob([data], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'MyFamilyTree.json';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file'; input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        let loaded = JSON.parse(event.target.result);
+                        persons = loaded.persons; links = loaded.links; idCounter = loaded.idCounter;
+                        selectedNodeIds.clear();
+                        renderAll();
+                    } catch (error) { alert("❌ Invalid file format."); }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function startDragPrint() {
+            dragMode = 'print';
+            document.body.style.cursor = 'crosshair';
+            showMsg("📸 Drag a box over the area you want to print!");
+            document.getElementById('btn-print').classList.replace('bg-amber-500', 'bg-gray-400');
+        }
+
+        function cancelPrint() {
+            dragMode = null;
+            document.body.style.cursor = 'default';
+            printBox.style.display = 'none';
+            document.getElementById('print-confirm-ui').classList.add('hidden');
+            showMsg("");
+            document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
+        }
+
+        function executePrint() {
+            document.getElementById('print-confirm-ui').classList.add('hidden');
+            printBox.style.display = 'none';
+            document.body.style.cursor = 'default';
+            showMsg("");
+            document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
+
+            let targetW = printRect.w / scale;
+            let targetH = printRect.h / scale;
+            let targetX = (printRect.x - panX) / scale;
+            let targetY = (printRect.y - panY) / scale;
+
+            let pageWidth = 1122; 
+            let printScale = pageWidth / targetW; 
+
+            let printPanX = -targetX * printScale; 
+            let printPanY = -targetY * printScale;
+
+            document.documentElement.style.setProperty('--print-pan-x', printPanX + 'px');
+            document.documentElement.style.setProperty('--print-pan-y', printPanY + 'px');
+            document.documentElement.style.setProperty('--print-scale', printScale);
+
+            setTimeout(() => { window.print(); }, 300);
+        }
+
+        window.onload = () => {
+            let startX = window.innerWidth / 2 - 60;
+            let startY = window.innerHeight / 2 - 45;
+            if (isNaN(startX) || startX <= 0) startX = 400;
+            persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "", cardScale: 1, x: startX, y: startY };
+            idCounter = 2;
+            renderAll();
+        };
+    </script>
+</body>
+</html>
