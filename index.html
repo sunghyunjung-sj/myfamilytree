@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🌳 Ultimate Family Tree</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
             background-color: #f1f5f9;
@@ -111,11 +110,37 @@
             width: max-content;
             max-width: 95vw;
         }
+
+        /* Native Print Styles */
+        @media print {
+            .no-print { display: none !important; }
+            body, html { 
+                width: 100% !important; 
+                height: 100% !important; 
+                background: white !important; 
+                overflow: hidden !important; 
+                margin: 0; padding: 0; 
+            }
+            @page { size: landscape; margin: 0; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            
+            #canvas-container { 
+                width: 1122px; height: 793px; 
+                position: absolute; left: 0; top: 0; 
+                transform: none !important; 
+                overflow: hidden !important;
+            }
+            #workspace { 
+                transform: translate(var(--print-pan-x, 0), var(--print-pan-y, 0)) scale(var(--print-scale, 1)) !important; 
+                transform-origin: 0 0 !important; 
+            }
+            .person-card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; }
+        }
     </style>
 </head>
 <body>
 
-    <div id="control-panel" class="border border-gray-200">
+    <div id="control-panel" class="no-print border border-gray-200">
         <div class="flex items-center gap-2 flex-wrap justify-center w-full">
             <button onclick="createNewTree()" class="bg-gray-800 hover:bg-black text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">🆕 New Tree</button>
             <button onclick="addPerson()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">➕ Add Person</button>
@@ -136,27 +161,27 @@
             <button onclick="startLinking('delete')" class="bg-red-100 hover:bg-red-200 text-red-600 font-semibold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">✂️ Unlink</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="autoLayout()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs" title="Align Y-axis (Heights) only">✨ Auto-Layout</button>
+            <button onclick="undo()" class="bg-gray-800 hover:bg-black text-white font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs" title="Undo Last Action (Ctrl+Z)">↩️ Undo</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="alignSelectedRow()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Align Y (Height)">↕️ Align</button>
-            <button onclick="distributeSelectedX()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Distribute X (Spacing)">↔️ Space</button>
+            <button onclick="alignSelectedRow()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Align Heights">↕️ Align</button>
+            <button onclick="distributeSelectedX()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Distribute Spacing">↔️ Space</button>
         </div>
     </div>
 
-    <div id="status-message" class="fixed top-36 left-1/2 transform -translate-x-1/2 w-full text-center text-amber-700 font-bold z-50 pointer-events-none drop-shadow-lg text-base bg-amber-50 border-2 border-amber-300 rounded-full px-6 py-2 w-max mx-auto hidden transition-all animate-bounce"></div>
+    <div id="status-message" class="no-print fixed top-36 left-1/2 transform -translate-x-1/2 w-full text-center text-amber-700 font-bold z-50 pointer-events-none drop-shadow-lg text-base bg-amber-50 border-2 border-amber-300 rounded-full px-6 py-2 w-max mx-auto hidden transition-all animate-bounce"></div>
 
-    <div id="print-confirm-ui" class="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
-        <div class="text-gray-700 font-bold mr-2">구역 선택 완료</div>
-        <button onclick="cancelPrint()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">취소</button>
-        <button onclick="executePrint()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">이미지 저장</button>
+    <div id="print-confirm-ui" class="no-print hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
+        <div class="text-gray-700 font-bold mr-2">Area selected.</div>
+        <button onclick="closeMode()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">Cancel</button>
+        <button onclick="executePrint()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">Print / Save PDF</button>
     </div>
 
     <div id="canvas-container">
         <div id="selection-box"></div>
         <div id="print-selection-box">
             <div class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-4 py-1 rounded-full text-xs shadow-md whitespace-nowrap">
-                📸 인쇄(저장)할 구역
+                📸 Area to Print
             </div>
         </div>
         
@@ -166,7 +191,7 @@
         </div>
     </div>
 
-    <div id="edit-modal" class="hidden fixed inset-0 bg-black/60 z-[300] flex justify-center items-center backdrop-blur-sm">
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/60 z-[300] flex justify-center items-center backdrop-blur-sm no-print">
         <div class="bg-white rounded-2xl p-6 w-80 shadow-2xl">
             <h3 class="text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
                 Profile Edit
@@ -181,40 +206,40 @@
             <div class="flex justify-between">
                 <button onclick="deletePerson()" class="text-red-500 hover:text-red-700 font-bold px-3 py-2 text-sm bg-red-50 rounded-lg transition">🗑️ Delete</button>
                 <div class="flex gap-2">
-                    <button onclick="closeModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition">Cancel</button>
+                    <button onclick="closeMode()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition">Cancel</button>
                     <button onclick="saveModal()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition">Save</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="guide-modal" class="hidden fixed inset-0 bg-black/60 z-[400] flex justify-center items-center backdrop-blur-sm p-4">
+    <div id="guide-modal" class="hidden fixed inset-0 bg-black/60 z-[400] flex justify-center items-center backdrop-blur-sm p-4 no-print">
         <div class="bg-white rounded-2xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onclick="closeGuide()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800 font-bold text-xl">✖</button>
+            <button onclick="closeMode()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800 font-bold text-xl">✖</button>
             <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">ℹ️ How to Use Family Tree</h2>
             
             <div class="space-y-4 text-gray-700 text-sm">
                 <div>
                     <h4 class="font-bold text-indigo-600 text-base mb-1">1. Multi-Select & Move 🟦</h4>
-                    <p><b>PC:</b> Hold <b>[Shift] + Drag</b> on the background to draw a blue box. <br>
+                    <p><b>PC:</b> Hold <b>[Shift] + Drag</b> on the background to draw a blue box.<br>
                        <b>Mobile:</b> Touch and drag cards individually.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-purple-600 text-base mb-1">2. Auto-Layout ✨</h4>
-                    <p>Click <b>[✨ Auto-Layout]</b> to automatically align ONLY the heights (Y-axis) based on generations. Your horizontal spacing (X-axis) will stay perfectly intact!</p>
+                    <h4 class="font-bold text-pink-600 text-base mb-1">2. Smart Linking 🔗</h4>
+                    <p>Click a link button (e.g., <b>🔗 Child</b>), then click the Parent, and finally the Child. Only link ONE parent.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-pink-600 text-base mb-1">3. Smart Linking 🔗</h4>
-                    <p>Click a link button (e.g., <b>🔗 Child</b>), then click Parent, and finally Child. Only link ONE parent.</p>
+                    <h4 class="font-bold text-amber-600 text-base mb-1">3. Print / Save PDF 🖨️</h4>
+                    <p>Click <b>[🖨️ Print]</b>, freely drag to select the exact area you want. The system will auto-zoom to fit the page perfectly.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-amber-600 text-base mb-1">4. Print Image 🖨️</h4>
-                    <p>Click <b>[🖨️ Print]</b>, freely drag to select the exact area you want, and save it as a high-quality picture.</p>
+                    <h4 class="font-bold text-emerald-600 text-base mb-1">4. Undo & Cancel Actions ↩️</h4>
+                    <p>Made a mistake? Click <b>[↩️ Undo]</b> or press <b>Ctrl+Z</b>. <br>Press <b>[ESC]</b> or use your phone's <b>Back Button</b> to cancel any active tool.</p>
                 </div>
             </div>
             
             <div class="mt-8 text-center">
-                <button onclick="closeGuide()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-8 rounded-full shadow-md transition">Got it!</button>
+                <button onclick="closeMode()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-8 rounded-full shadow-md transition">Got it!</button>
             </div>
         </div>
     </div>
@@ -222,12 +247,13 @@
     <input type="file" id="img-upload" accept="image/*" class="hidden">
 
     <script>
-        // --- Core Data ---
+        // --- Core Data & State ---
         let persons = {}; 
         let links = [];   
         let idCounter = 1;
+        let undoStack = [];
 
-        // --- View & State ---
+        // --- View & Controls ---
         let panX = 0, panY = 0; 
         let scale = 1;
         
@@ -244,10 +270,14 @@
 
         let lastClickTime = 0;
         let lastClickId = null;
+        let hasMovedInDrag = false;
+        let dragStartData = null;
 
         let isPinching = false;
         let initialPinchDist = 0;
         let initialScale = 1;
+
+        let isModeActive = false; // For ESC & Mobile Back Button
 
         const container = document.getElementById('canvas-container');
         const workspace = document.getElementById('workspace');
@@ -257,15 +287,83 @@
         const selBox = document.getElementById('selection-box');
         const printBox = document.getElementById('print-selection-box');
 
+        // --- Undo / History Logic ---
+        function saveState() {
+            undoStack.push({
+                persons: JSON.parse(JSON.stringify(persons)),
+                links: JSON.parse(JSON.stringify(links)),
+                idCounter: idCounter
+            });
+            if (undoStack.length > 50) undoStack.shift();
+        }
+
+        function pushCustomState(pStr, lStr, idVal) {
+            undoStack.push({ persons: JSON.parse(pStr), links: JSON.parse(lStr), idCounter: idVal });
+            if (undoStack.length > 50) undoStack.shift();
+        }
+
+        function undo() {
+            if (undoStack.length === 0) { 
+                showMsg("Nothing to undo."); 
+                setTimeout(() => showMsg(""), 1500); 
+                return; 
+            }
+            let state = undoStack.pop();
+            persons = state.persons;
+            links = state.links;
+            idCounter = state.idCounter;
+            selectedNodeIds.clear();
+            renderAll();
+            showMsg("↩️ Undo successful."); 
+            setTimeout(() => showMsg(""), 1500);
+        }
+
+        // --- ESC & Mobile Back (History API) Logic ---
+        function openMode() {
+            if (!isModeActive) {
+                history.pushState({ internalModal: true }, '');
+                isModeActive = true;
+            }
+        }
+
+        function closeMode() {
+            if (isModeActive) {
+                isModeActive = false;
+                history.back(); 
+            } else {
+                forceCloseAllModes();
+            }
+        }
+
+        window.addEventListener('popstate', (e) => {
+            isModeActive = false;
+            forceCloseAllModes();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if(e.key === 'Escape') { closeMode(); }
+            if(e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
+        });
+
+        function forceCloseAllModes() {
+            document.getElementById('edit-modal').classList.add('hidden');
+            document.getElementById('guide-modal').classList.add('hidden');
+            
+            if(dragMode === 'print') {
+                dragMode = null; document.body.style.cursor = 'default'; printBox.style.display = 'none';
+                document.getElementById('print-confirm-ui').classList.add('hidden'); showMsg("");
+                document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
+            }
+            if(linkMode) {
+                linkMode = null; linkStepId = null; document.body.style.cursor = 'default'; showMsg(""); renderAll();
+            }
+        }
+
+        // --- Utils ---
         function getTimestampStr() {
             const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
         }
 
         function showMsg(text) {
@@ -275,9 +373,7 @@
         }
 
         function getClientPos(e) {
-            if (e.touches && e.touches.length > 0) {
-                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
+            if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
             return { x: e.clientX, y: e.clientY };
         }
 
@@ -285,150 +381,8 @@
             return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
 
-        // --- 💡 무조건 Y축(높이)만 세대별 일치시키는 완벽한 알고리즘 ---
-        function autoLayout() {
-            if(Object.keys(persons).length === 0) return;
-
-            let levels = {}; 
-            Object.keys(persons).forEach(id => levels[id] = undefined);
-
-            let childrenMap = {};
-            let spousesMap = {};
-            let siblingsMap = {};
-
-            Object.keys(persons).forEach(id => {
-                childrenMap[id] = [];
-                spousesMap[id] = [];
-                siblingsMap[id] = [];
-            });
-
-            links.forEach(l => {
-                let src = l.sourceId.toString();
-                let tgt = l.targetId.toString();
-                if(!persons[src] || !persons[tgt]) return;
-
-                if(l.type === 'spouse') {
-                    spousesMap[src].push(tgt);
-                    spousesMap[tgt].push(src);
-                } else if (l.type === 'child') {
-                    childrenMap[src].push(tgt);
-                } else if (l.type === 'sibling') {
-                    siblingsMap[src].push(tgt);
-                    siblingsMap[tgt].push(src);
-                }
-            });
-
-            // 형제 선이 없더라도 같은 부모를 공유하면 형제 그룹으로 강제 바인딩
-            let parentGroups = getEffectiveParentGroups();
-            for(let pidsStr in parentGroups) {
-                let cids = parentGroups[pidsStr];
-                for(let i=0; i<cids.length; i++) {
-                    for(let j=i+1; j<cids.length; j++) {
-                        let c1 = cids[i].toString();
-                        let c2 = cids[j].toString();
-                        if(!siblingsMap[c1].includes(c2)) siblingsMap[c1].push(c2);
-                        if(!siblingsMap[c2].includes(c1)) siblingsMap[c2].push(c1);
-                    }
-                }
-            }
-
-            // 최상단 뿌리 세대(부모가 없는 노드) 색출하여 Level 0 부여
-            Object.keys(persons).forEach(id => {
-                let hasParents = links.some(l => l.type === 'child' && l.targetId.toString() === id);
-                if(!hasParents) levels[id] = 0;
-            });
-
-            if (Object.values(levels).every(v => v === undefined)) {
-                levels[Object.keys(persons)[0]] = 0;
-            }
-
-            // 관계망을 따라 모든 세대 레벨 동기화 (Relaxation 방식)
-            for (let pass = 0; pass < 100; pass++) {
-                let changed = false;
-                Object.keys(persons).forEach(id => {
-                    let currLvl = levels[id];
-                    if(currLvl !== undefined) {
-                        spousesMap[id].forEach(sId => { if(levels[sId] !== currLvl) { levels[sId] = currLvl; changed = true; } });
-                        siblingsMap[id].forEach(sId => { if(levels[sId] !== currLvl) { levels[sId] = currLvl; changed = true; } });
-                        childrenMap[id].forEach(cId => { if(levels[cId] !== currLvl + 1) { levels[cId] = currLvl + 1; changed = true; } });
-                    } else {
-                        childrenMap[id].forEach(cId => {
-                            if(levels[cId] !== undefined && levels[id] === undefined) {
-                                levels[id] = levels[cId] - 1;
-                                changed = true;
-                            }
-                        });
-                    }
-                });
-                if(!changed) break;
-            }
-
-            // 고립된 노드 방어 처리
-            Object.keys(persons).forEach(id => { if(levels[id] === undefined) levels[id] = 0; });
-
-            let minLevel = Math.min(...Object.values(levels));
-            let startY = 150;     
-            let spacingY = 220;   
-
-            // 💡 X축은 완전히 보존하고 Y축만 세대별 정렬
-            Object.keys(levels).forEach(id => {
-                let actualLvl = levels[id] - minLevel;
-                persons[id].y = startY + (actualLvl * spacingY); 
-            });
-
-            renderAll();
-            showMsg("✨ Auto-Layout: 모든 세대의 높이가 완벽하게 정렬되었습니다!");
-            setTimeout(() => showMsg(""), 2500);
-        }
-
-        function getEffectiveParentGroups() {
-            let spouseMap = {};
-            Object.keys(persons).forEach(id => spouseMap[id] = new Set());
-            links.filter(l => l.type === 'spouse').forEach(l => {
-                if(spouseMap[l.sourceId]) spouseMap[l.sourceId].add(l.targetId.toString());
-                if(spouseMap[l.targetId]) spouseMap[l.targetId].add(l.sourceId.toString());
-            });
-
-            let childToEffectiveParents = {};
-            links.filter(l => l.type === 'child').forEach(l => {
-                let cid = l.targetId.toString();
-                let pid = l.sourceId.toString();
-                if(!childToEffectiveParents[cid]) childToEffectiveParents[cid] = new Set();
-                
-                childToEffectiveParents[cid].add(pid);
-                spouseMap[pid].forEach(spId => childToEffectiveParents[cid].add(spId));
-            });
-
-            let parentGroups = {};
-            for(let cid in childToEffectiveParents) {
-                let pidsStr = Array.from(childToEffectiveParents[cid]).sort((a,b) => a-b).join(',');
-                if(!parentGroups[pidsStr]) parentGroups[pidsStr] = [];
-                parentGroups[pidsStr].push(parseInt(cid));
-            }
-            return parentGroups;
-        }
-
-        function enforceConstraints() {
-            let parentGroups = getEffectiveParentGroups();
-            for(let pidsStr in parentGroups) {
-                let cids = parentGroups[pidsStr];
-                if (cids.length === 1) {
-                    let pids = pidsStr.split(',').map(Number);
-                    let sumX = 0, validP = 0;
-                    pids.forEach(pid => {
-                        if(persons[pid]) { sumX += persons[pid].x + 60; validP++; }
-                    });
-                    if (validP > 0) {
-                        let pMidX = sumX / validP;
-                        persons[cids[0]].x = pMidX - 60; 
-                    }
-                }
-            }
-        }
-
+        // --- Core Rendering ---
         function renderAll() {
-            if (dragMode !== 'node') { enforceConstraints(); }
-
             nodesContainer.innerHTML = '';
             Object.values(persons).forEach(p => {
                 const div = document.createElement('div');
@@ -483,25 +437,36 @@
                 let p1 = persons[link.sourceId], p2 = persons[link.targetId];
                 if(p1 && p2) {
                     let cx1 = p1.x + 60, cy1 = p1.y + 45, cx2 = p2.x + 60, cy2 = p2.y + 45;
-                    let midX = (cx1+cx2)/2;
-                    let archY = Math.min(cy1, cy2) - 60;
+                    let midX = (cx1+cx2)/2; let archY = Math.min(cy1, cy2) - 60;
                     svgContent += `<path d="M ${cx1} ${cy1} Q ${midX} ${archY} ${cx2} ${cy2}" stroke="#fbbf24" stroke-width="3" stroke-dasharray="6 6" fill="none" />`;
                 }
             });
 
-            let parentGroups = getEffectiveParentGroups();
+            let spouseMap = {};
+            Object.keys(persons).forEach(id => spouseMap[id] = new Set());
+            spouseLinks.forEach(l => { spouseMap[l.sourceId].add(l.targetId.toString()); spouseMap[l.targetId].add(l.sourceId.toString()); });
+
+            let childToEffectiveParents = {};
+            links.filter(l => l.type === 'child').forEach(l => {
+                let cid = l.targetId.toString(), pid = l.sourceId.toString();
+                if(!childToEffectiveParents[cid]) childToEffectiveParents[cid] = new Set();
+                childToEffectiveParents[cid].add(pid);
+                spouseMap[pid].forEach(spId => childToEffectiveParents[cid].add(spId));
+            });
+
+            let parentGroups = {};
+            for(let cid in childToEffectiveParents) {
+                let pidsStr = Array.from(childToEffectiveParents[cid]).sort((a,b) => a-b).join(',');
+                if(!parentGroups[pidsStr]) parentGroups[pidsStr] = [];
+                parentGroups[pidsStr].push(parseInt(cid));
+            }
+
             for(let pidsStr in parentGroups) {
-                let cids = parentGroups[pidsStr];
-                let pids = pidsStr.split(',').map(Number);
+                let cids = parentGroups[pidsStr]; let pids = pidsStr.split(',').map(Number);
                 let sumX = 0, sumY = 0, validP = 0, lowestParentY = 0; 
 
                 pids.forEach(pid => {
-                    if(persons[pid]) { 
-                        sumX += persons[pid].x + 60; 
-                        sumY += persons[pid].y + 45; 
-                        lowestParentY = Math.max(lowestParentY, persons[pid].y + 145);
-                        validP++; 
-                    }
+                    if(persons[pid]) { sumX += persons[pid].x + 60; sumY += persons[pid].y + 45; lowestParentY = Math.max(lowestParentY, persons[pid].y + 145); validP++; }
                 });
                 if(validP === 0) continue;
                 
@@ -513,18 +478,12 @@
                 let minCX = Math.min(...childCoords.map(c => c.x));
                 let maxCX = Math.max(...childCoords.map(c => c.x));
                 let minCY = Math.min(...childCoords.map(c => c.y));
-                let dropY = minCY - 30; 
-                if (dropY <= pMidY) dropY = pMidY + 20;
+                let dropY = minCY - 30; if (dropY <= pMidY) dropY = pMidY + 20;
 
                 svgContent += `<path d="M ${pMidX} ${pMidY} L ${pMidX} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
-                let spineMin = Math.min(pMidX, minCX);
-                let spineMax = Math.max(pMidX, maxCX);
-                if (spineMin !== spineMax) {
-                    svgContent += `<path d="M ${spineMin} ${dropY} L ${spineMax} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
-                }
-                childCoords.forEach(c => {
-                    svgContent += `<path d="M ${c.x} ${dropY} L ${c.x} ${c.y}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
-                });
+                let spineMin = Math.min(pMidX, minCX), spineMax = Math.max(pMidX, maxCX);
+                if (spineMin !== spineMax) svgContent += `<path d="M ${spineMin} ${dropY} L ${spineMax} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
+                childCoords.forEach(c => { svgContent += `<path d="M ${c.x} ${dropY} L ${c.x} ${c.y}" stroke="#94a3b8" stroke-width="3" fill="none" />`; });
             }
             linesSvg.innerHTML = svgContent;
         }
@@ -533,40 +492,28 @@
             workspace.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
         }
 
+        // --- Actions ---
         function addPerson() {
-            let screenCenterX = window.innerWidth / 2;
-            let screenCenterY = window.innerHeight / 2;
-            if (isNaN(screenCenterX) || screenCenterX === 0) screenCenterX = 400;
-            if (isNaN(screenCenterY) || screenCenterY === 0) screenCenterY = 300;
-
-            let cx = (screenCenterX - panX) / scale - 60;
-            let cy = (screenCenterY - panY) / scale - 45;
-            cx += (Math.random() - 0.5) * 60;
-            cy += (Math.random() - 0.5) * 60;
-
-            persons[idCounter] = { id: idCounter, name: "New Person", gender: "M", photo: null, birth: "", cardScale: 1, x: cx, y: cy };
-            selectedNodeIds.clear();
-            selectedNodeIds.add(idCounter);
-            idCounter++;
-            renderAll();
+            saveState();
+            let cx = (window.innerWidth / 2 - panX) / scale - 60;
+            let cy = (window.innerHeight / 2 - panY) / scale - 45;
+            persons[idCounter] = { id: idCounter, name: "New Person", gender: "M", photo: null, birth: "", cardScale: 1, x: cx + (Math.random()-0.5)*60, y: cy + (Math.random()-0.5)*60 };
+            selectedNodeIds.clear(); selectedNodeIds.add(idCounter);
+            idCounter++; renderAll();
         }
 
         function createNewTree() {
-            if(confirm("Are you sure you want to start a NEW family tree? Any unsaved changes will be lost.")) {
+            if(confirm("Start a NEW family tree? Any unsaved changes will be lost.")) {
+                saveState();
                 persons = {}; links = []; idCounter = 1; selectedNodeIds.clear();
-                let startX = window.innerWidth / 2 - 60;
-                let startY = window.innerHeight / 2 - 45;
-                if (isNaN(startX) || startX <= 0) startX = 400;
+                let startX = window.innerWidth / 2 - 60, startY = window.innerHeight / 2 - 45;
                 persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "", cardScale: 1, x: startX, y: startY };
-                idCounter = 2;
-                panX = 0; panY = 0; scale = 1; 
-                renderAll();
+                idCounter = 2; panX = 0; panY = 0; scale = 1; renderAll();
             }
         }
 
         function handleNodeStart(e, id) {
-            e.stopPropagation(); 
-            let pos = getClientPos(e);
+            e.stopPropagation(); let pos = getClientPos(e);
             let now = Date.now();
             if (lastClickId === id && (now - lastClickTime) < 300) { openModal(id); return; }
             lastClickTime = now; lastClickId = id;
@@ -574,11 +521,12 @@
             if (linkMode) {
                 if (!linkStepId) {
                     linkStepId = id;
-                    if(linkMode === 'delete') showMsg("✂️ Delete Mode: 두 번째 사람을 선택하면 링크가 삭제됩니다.");
-                    else showMsg("🔗 연결할 두 번째 사람을 선택해 주세요.");
+                    if(linkMode === 'delete') showMsg("✂️ Select the second person to REMOVE the link.");
+                    else showMsg("🔗 Select the second person to connect.");
                     renderAll(); 
                 } else {
                     if (linkStepId !== id) {
+                        saveState(); // Save before linking
                         if (linkMode === 'delete') {
                             links = links.filter(l => !( (l.sourceId === linkStepId && l.targetId === id) || (l.targetId === linkStepId && l.sourceId === id) ));
                         } else {
@@ -588,7 +536,7 @@
                             if (!exists) links.push({ sourceId: source, targetId: target, type: linkMode });
                         }
                     }
-                    cancelLinking();
+                    closeMode(); // Will call forceCloseAllModes and exit link mode cleanly
                 }
                 return;
             }
@@ -603,12 +551,15 @@
 
             dragMode = 'node';
             startX = pos.x / scale; startY = pos.y / scale;
+            hasMovedInDrag = false;
+            dragStartData = { persons: JSON.stringify(persons), links: JSON.stringify(links), id: idCounter };
+            
             originalPositions = {};
             selectedNodeIds.forEach(nId => { originalPositions[nId] = { x: persons[nId].x, y: persons[nId].y }; });
         }
 
         function handleCanvasStart(e) {
-            if (linkMode) { cancelLinking(); return; }
+            if (linkMode) { closeMode(); return; }
             let pos = getClientPos(e);
             
             if (e.touches && e.touches.length === 2) {
@@ -624,16 +575,14 @@
             }
 
             if (e.shiftKey) { 
-                dragMode = 'select';
-                startX = pos.x; startY = pos.y;
+                dragMode = 'select'; startX = pos.x; startY = pos.y;
                 selectionRect = { x1: startX, y1: startY, x2: startX, y2: startY };
                 selBox.style.left = startX + 'px'; selBox.style.top = startY + 'px';
                 selBox.style.width = '0px'; selBox.style.height = '0px'; selBox.style.display = 'block';
             } else { 
                 dragMode = 'canvas'; startX = pos.x - panX; startY = pos.y - panY;
                 if(selectedNodeIds.size > 0) {
-                    selectedNodeIds.clear(); 
-                    document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
+                    selectedNodeIds.clear(); document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
                 }
             }
         }
@@ -643,16 +592,15 @@
 
         function handleGlobalMove(e) {
             if (isPinching && e.touches && e.touches.length === 2) {
-                let currentDist = getPinchDistance(e);
-                let delta = currentDist / initialPinchDist;
-                scale = Math.min(Math.max(0.1, initialScale * delta), 3);
-                updateTransform(); return;
+                let currentDist = getPinchDistance(e); let delta = currentDist / initialPinchDist;
+                scale = Math.min(Math.max(0.1, initialScale * delta), 3); updateTransform(); return;
             }
 
             if (!dragMode) return;
             let pos = getClientPos(e);
 
             if (dragMode === 'node') {
+                hasMovedInDrag = true;
                 let dx = pos.x / scale - startX; let dy = pos.y / scale - startY;
                 selectedNodeIds.forEach(nId => {
                     persons[nId].x = originalPositions[nId].x + dx; persons[nId].y = originalPositions[nId].y + dy;
@@ -672,12 +620,12 @@
             }
         }
 
-        window.onmousemove = handleGlobalMove;
-        window.ontouchmove = handleGlobalMove;
+        window.onmousemove = handleGlobalMove; window.ontouchmove = handleGlobalMove;
 
         function handleGlobalEnd() {
             isPinching = false;
             if (dragMode === 'node') {
+                if(hasMovedInDrag && dragStartData) pushCustomState(dragStartData.persons, dragStartData.links, dragStartData.id);
                 renderAll();
             } else if (dragMode === 'select') {
                 selBox.style.display = 'none'; selectedNodeIds.clear();
@@ -688,45 +636,33 @@
                 renderAll();
             } else if (dragMode === 'print') {
                 if (printRect.w > 50 && printRect.h > 50) {
-                    document.getElementById('print-confirm-ui').classList.remove('hidden');
-                    showMsg(""); // 구역 선택 완료되면 가독성을 위해 상단 문구는 지움
-                } else { cancelPrint(); }
+                    document.getElementById('print-confirm-ui').classList.remove('hidden'); showMsg("");
+                } else { closeMode(); }
             }
             dragMode = null;
         }
 
         window.onmouseup = handleGlobalEnd; window.ontouchend = handleGlobalEnd;
-
-        container.onwheel = (e) => {
-            e.preventDefault(); const delta = e.deltaY > 0 ? 0.9 : 1.1;
-            scale = Math.min(Math.max(0.1, scale * delta), 3); updateTransform();
-        };
+        container.onwheel = (e) => { e.preventDefault(); const delta = e.deltaY > 0 ? 0.9 : 1.1; scale = Math.min(Math.max(0.1, scale * delta), 3); updateTransform(); };
 
         function alignSelectedRow() {
-            if(selectedNodeIds.size < 2) { alert("Please select 2 or more people (Shift + Drag)."); return; }
+            if(selectedNodeIds.size < 2) { alert("Please select 2 or more people."); return; }
+            saveState();
             let sumY = 0; selectedNodeIds.forEach(id => sumY += persons[id].y);
-            let avgY = sumY / selectedNodeIds.size; selectedNodeIds.forEach(id => persons[id].y = avgY);
-            renderAll();
+            let avgY = sumY / selectedNodeIds.size; selectedNodeIds.forEach(id => persons[id].y = avgY); renderAll();
         }
 
         function distributeSelectedX() {
-            if(selectedNodeIds.size < 3) { alert("Please select 3 or more people (Shift + Drag)."); return; }
+            if(selectedNodeIds.size < 3) { alert("Please select 3 or more people."); return; }
+            saveState();
             let arr = Array.from(selectedNodeIds).map(id => persons[id]).sort((a, b) => a.x - b.x);
             let minX = arr[0].x; let maxX = arr[arr.length-1].x; let step = (maxX - minX) / (arr.length - 1);
-            for(let i = 1; i < arr.length - 1; i++) arr[i].x = minX + (step * i);
-            renderAll();
-        }
-
-        function resizeSelected(delta) {
-            if(selectedNodeIds.size === 0) { alert("Please select people to resize."); return; }
-            selectedNodeIds.forEach(id => {
-                let current = persons[id].cardScale || 1; persons[id].cardScale = Math.max(0.4, Math.min(2.0, current + delta));
-            });
-            renderAll();
+            for(let i = 1; i < arr.length - 1; i++) arr[i].x = minX + (step * i); renderAll();
         }
 
         function actionSiblingLink() {
             if (selectedNodeIds.size >= 2) {
+                saveState();
                 let arr = Array.from(selectedNodeIds);
                 for(let i=0; i<arr.length-1; i++) {
                     let exists = links.some(l => (l.sourceId === arr[i] && l.targetId === arr[i+1]) || (l.targetId === arr[i] && l.sourceId === arr[i+1]));
@@ -737,23 +673,45 @@
         }
 
         function startLinking(type) {
-            linkMode = type; linkStepId = null; selectedNodeIds.clear(); renderAll();
-            document.body.style.cursor = 'crosshair';
-            if(type === 'delete') showMsg("✂️ Unlink Mode: 첫 번째 카드를 클릭하세요.");
-            else if(type === 'spouse') showMsg("🔗 Spouse 연결: 남편 카드를 누른 후 아내 카드를 누르세요.");
-            else if(type === 'sibling') showMsg("🔗 Sibling 연결: 첫 번째 형제 카드를 누른 후 두 번째 형제 카드를 누르세요.");
-            else if(type === 'child') showMsg("🔗 Child 연결: 부모 카드를 누른 후 자녀 카드를 누르세요.");
+            openMode();
+            linkMode = type; linkStepId = null; selectedNodeIds.clear(); renderAll(); document.body.style.cursor = 'crosshair';
+            if(type === 'delete') showMsg("✂️ Unlink Mode: Click the first person.");
+            else if(type === 'spouse') showMsg("🔗 Spouse Link: Click the Husband, then the Wife.");
+            else if(type === 'sibling') showMsg("🔗 Sibling Link: Click the first sibling, then the second.");
+            else if(type === 'child') showMsg("🔗 Child Link: Click the Parent, then the Child.");
         }
         
-        function cancelLinking() { linkMode = null; linkStepId = null; document.body.style.cursor = 'default'; showMsg(""); renderAll(); }
-        function openModal(id) { if (dragMode === 'print' || printBox.style.display === 'block') return; editTargetId = id; document.getElementById('edit-name').value = persons[id].name; document.getElementById('edit-birth').value = persons[id].birth || ""; document.getElementById('edit-gender').value = persons[id].gender; document.getElementById('edit-modal').classList.remove('hidden'); }
-        function closeModal() { document.getElementById('edit-modal').classList.add('hidden'); }
-        function saveModal() { if (editTargetId) { persons[editTargetId].name = document.getElementById('edit-name').value || "Unknown"; persons[editTargetId].birth = document.getElementById('edit-birth').value; persons[editTargetId].gender = document.getElementById('edit-gender').value; } closeModal(); renderAll(); }
+        function openModal(id) { 
+            if (dragMode === 'print' || printBox.style.display === 'block') return; 
+            openMode();
+            editTargetId = id; 
+            document.getElementById('edit-name').value = persons[id].name; 
+            document.getElementById('edit-birth').value = persons[id].birth || ""; 
+            document.getElementById('edit-gender').value = persons[id].gender; 
+            document.getElementById('edit-modal').classList.remove('hidden'); 
+        }
+
+        function saveModal() { 
+            saveState();
+            if (editTargetId) { 
+                persons[editTargetId].name = document.getElementById('edit-name').value || "Unknown"; 
+                persons[editTargetId].birth = document.getElementById('edit-birth').value; 
+                persons[editTargetId].gender = document.getElementById('edit-gender').value; 
+            } 
+            closeMode(); renderAll(); 
+        }
         
-        function deletePerson() { if(confirm("Are you sure you want to delete this person?")) { delete persons[editTargetId]; links = links.filter(l => l.sourceId !== editTargetId && l.targetId !== editTargetId); selectedNodeIds.delete(editTargetId); closeModal(); renderAll(); } }
-        function triggerModalPhotoUpload() { const input = document.getElementById('img-upload'); input.onchange = (ev) => { if (ev.target.files[0]) { const reader = new FileReader(); reader.onload = (e) => { if(editTargetId) { persons[editTargetId].photo = e.target.result; renderAll(); } }; reader.readAsDataURL(ev.target.files[0]); } input.value = ''; }; input.click(); }
-        function openGuide() { document.getElementById('guide-modal').classList.remove('hidden'); }
-        function closeGuide() { document.getElementById('guide-modal').classList.add('hidden'); }
+        function deletePerson() { 
+            if(confirm("Are you sure you want to delete this person?")) { 
+                saveState();
+                delete persons[editTargetId]; links = links.filter(l => l.sourceId !== editTargetId && l.targetId !== editTargetId); selectedNodeIds.delete(editTargetId); 
+                closeMode(); renderAll(); 
+            } 
+        }
+
+        function triggerModalPhotoUpload() { const input = document.getElementById('img-upload'); input.onchange = (ev) => { if (ev.target.files[0]) { const reader = new FileReader(); reader.onload = (e) => { if(editTargetId) { saveState(); persons[editTargetId].photo = e.target.result; renderAll(); } }; reader.readAsDataURL(ev.target.files[0]); } input.value = ''; }; input.click(); }
+        
+        function openGuide() { openMode(); document.getElementById('guide-modal').classList.remove('hidden'); }
 
         function exportData() {
             const data = JSON.stringify({ persons, links, idCounter }); const blob = new Blob([data], { type: "application/json" }); const url = URL.createObjectURL(blob);
@@ -764,68 +722,50 @@
             const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
             input.onchange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
-                const reader = new FileReader(); reader.onload = (event) => { try { let loaded = JSON.parse(event.target.result); persons = loaded.persons; links = loaded.links; idCounter = loaded.idCounter; selectedNodeIds.clear(); renderAll(); } catch (error) { alert("❌ Invalid file format."); } }; reader.readAsText(file);
+                const reader = new FileReader(); reader.onload = (event) => { try { saveState(); let loaded = JSON.parse(event.target.result); persons = loaded.persons; links = loaded.links; idCounter = loaded.idCounter; selectedNodeIds.clear(); renderAll(); } catch (error) { alert("❌ Invalid file format."); } }; reader.readAsText(file);
             }; input.click();
         }
 
-        // --- 💡 신규 Print (이미지 캡처) 기획 반영 ---
+        // --- 💡 Native Print Logic (Zoom to Fit) ---
         function startPrint() {
-            dragMode = 'print';
-            document.body.style.cursor = 'crosshair';
-            // 버튼 클릭 시 문구가 무조건 강하게 출력됨
-            showMsg("🖨️ 인쇄(저장)할 구역을 마우스나 터치로 드래그해서 네모 박스를 그려주세요!");
+            openMode();
+            dragMode = 'print'; document.body.style.cursor = 'crosshair';
+            showMsg("🖨️ Drag to select the exact area you want to print/save.");
             document.getElementById('btn-print').classList.replace('bg-amber-500', 'bg-gray-400');
         }
 
-        function cancelPrint() {
-            dragMode = null; document.body.style.cursor = 'default'; printBox.style.display = 'none';
-            document.getElementById('print-confirm-ui').classList.add('hidden'); showMsg("");
-            document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
-        }
-
         function executePrint() {
-            document.getElementById('print-confirm-ui').classList.add('hidden');
-            printBox.style.display = 'none'; document.body.style.cursor = 'wait';
-            showMsg("🖨️ 고화질 이미지 스캔 중... 잠시만 기다려주세요.");
+            closeMode(); // 닫으면서 UI 정리
+            showMsg("🖨️ Preparing document...");
 
+            // 사용자가 선택한 구역의 실제 크기와 좌표
             let targetW = printRect.w / scale; let targetH = printRect.h / scale;
             let targetX = (printRect.x - panX) / scale; let targetY = (printRect.y - panY) / scale;
 
-            let oldPanX = panX, oldPanY = panY, oldScale = scale;
-            panX = 0; panY = 0; scale = 1; updateTransform();
-
-            selectedNodeIds.clear();
-            document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
-
-            // 💡 연결선 짤림 완전 방지: 캡처 영역을 완전히 포용하도록 도화지 크기를 강제 대형 확장
-            let svgLines = document.getElementById('lines-svg');
-            let oldSvgWidth = svgLines.style.width; let oldSvgHeight = svgLines.style.height;
+            // A4 가로 기준 비율 (Native Print가 이 비율을 바탕으로 종이에 꽉 채워 인쇄함)
+            let pageWidth = 1122; let pageHeight = 793;
             
-            let expandW = Math.max(window.innerWidth, targetX + targetW + 2000);
-            let expandH = Math.max(window.innerHeight, targetY + targetH + 2000);
-            svgLines.style.width = expandW + 'px'; svgLines.style.height = expandH + 'px';
+            // 비율에 맞게 스케일 계산 (Zoom to Fit)
+            let scaleX = pageWidth / targetW; let scaleY = pageHeight / targetH;
+            let printScale = Math.min(scaleX, scaleY);
+
+            // 중앙 정렬 보정값
+            let printPanX = -targetX * printScale + (pageWidth - targetW * printScale) / 2;
+            let printPanY = -targetY * printScale + (pageHeight - targetH * printScale) / 2;
+
+            // CSS 변수 주입
+            document.documentElement.style.setProperty('--print-pan-x', printPanX + 'px');
+            document.documentElement.style.setProperty('--print-pan-y', printPanY + 'px');
+            document.documentElement.style.setProperty('--print-scale', printScale);
 
             setTimeout(() => {
-                html2canvas(document.getElementById('workspace'), {
-                    x: targetX, y: targetY, width: targetW, height: targetH,
-                    backgroundColor: "#f1f5f9", scale: 2 // 선명한 2배 화질
-                }).then(canvas => {
-                    // 원래 상태로 완벽 복구
-                    svgLines.style.width = oldSvgWidth; svgLines.style.height = oldSvgHeight;
-                    panX = oldPanX; panY = oldPanY; scale = oldScale; updateTransform();
-                    
-                    document.body.style.cursor = 'default'; showMsg("");
-                    document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
-
-                    let a = document.createElement('a');
-                    a.href = canvas.toDataURL("image/png");
-                    a.download = `FamilyTree_${getTimestampStr()}.png`;
-                    a.click();
-                });
-            }, 300);
+                window.print();
+                showMsg("");
+            }, 500);
         }
 
         window.onload = () => {
+            history.replaceState({ root: true }, ''); // 초기 히스토리 세팅
             let startX = window.innerWidth / 2 - 60; let startY = window.innerHeight / 2 - 45;
             if (isNaN(startX) || startX <= 0) startX = 400;
             persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "1985", cardScale: 1, x: startX, y: startY };
