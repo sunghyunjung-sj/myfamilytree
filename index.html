@@ -85,6 +85,7 @@
             display: none;
         }
 
+        /* 💡 버그 수정: no-print 클래스가 HTML 태그에 직접 들어가도록 조치됨 */
         #print-selection-box {
             position: absolute;
             border: 3px dashed #ef4444;
@@ -179,7 +180,7 @@
 
     <div id="canvas-container">
         <div id="selection-box"></div>
-        <div id="print-selection-box">
+        <div id="print-selection-box" class="no-print">
             <div class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-4 py-1 rounded-full text-xs shadow-md whitespace-nowrap">
                 📸 Area to Print
             </div>
@@ -349,9 +350,12 @@
             document.getElementById('edit-modal').classList.add('hidden');
             document.getElementById('guide-modal').classList.add('hidden');
             
-            if(dragMode === 'print') {
-                dragMode = null; document.body.style.cursor = 'default'; printBox.style.display = 'none';
-                document.getElementById('print-confirm-ui').classList.add('hidden'); showMsg("");
+            if(dragMode === 'print' || document.getElementById('print-selection-box').style.display !== 'none') {
+                dragMode = null; 
+                document.body.style.cursor = 'default'; 
+                document.getElementById('print-selection-box').style.display = 'none';
+                document.getElementById('print-confirm-ui').classList.add('hidden'); 
+                showMsg("");
                 document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
             }
             if(linkMode) {
@@ -536,7 +540,7 @@
                             if (!exists) links.push({ sourceId: source, targetId: target, type: linkMode });
                         }
                     }
-                    closeMode(); // Will call forceCloseAllModes and exit link mode cleanly
+                    closeMode(); 
                 }
                 return;
             }
@@ -578,7 +582,8 @@
                 dragMode = 'select'; startX = pos.x; startY = pos.y;
                 selectionRect = { x1: startX, y1: startY, x2: startX, y2: startY };
                 selBox.style.left = startX + 'px'; selBox.style.top = startY + 'px';
-                selBox.style.width = '0px'; selBox.style.height = '0px'; selBox.style.display = 'block';
+                selBox.style.width = '0px'; selBox.style.height = '0px';
+                selBox.style.display = 'block';
             } else { 
                 dragMode = 'canvas'; startX = pos.x - panX; startY = pos.y - panY;
                 if(selectedNodeIds.size > 0) {
@@ -726,7 +731,7 @@
             }; input.click();
         }
 
-        // --- 💡 Native Print Logic (Zoom to Fit) ---
+        // --- 💡 100% 버그 수정된 Native Print Logic ---
         function startPrint() {
             openMode();
             dragMode = 'print'; document.body.style.cursor = 'crosshair';
@@ -735,37 +740,36 @@
         }
 
         function executePrint() {
-            closeMode(); // 닫으면서 UI 정리
+            // 💡 여기서 빨간 박스와 UI를 완벽하게 숨깁니다!
+            document.getElementById('print-selection-box').style.display = 'none';
+            document.getElementById('print-confirm-ui').classList.add('hidden');
+            document.body.style.cursor = 'default';
+            dragMode = null; 
+            
             showMsg("🖨️ Preparing document...");
 
-            // 사용자가 선택한 구역의 실제 크기와 좌표
             let targetW = printRect.w / scale; let targetH = printRect.h / scale;
             let targetX = (printRect.x - panX) / scale; let targetY = (printRect.y - panY) / scale;
 
-            // A4 가로 기준 비율 (Native Print가 이 비율을 바탕으로 종이에 꽉 채워 인쇄함)
             let pageWidth = 1122; let pageHeight = 793;
-            
-            // 비율에 맞게 스케일 계산 (Zoom to Fit)
             let scaleX = pageWidth / targetW; let scaleY = pageHeight / targetH;
             let printScale = Math.min(scaleX, scaleY);
 
-            // 중앙 정렬 보정값
             let printPanX = -targetX * printScale + (pageWidth - targetW * printScale) / 2;
             let printPanY = -targetY * printScale + (pageHeight - targetH * printScale) / 2;
 
-            // CSS 변수 주입
             document.documentElement.style.setProperty('--print-pan-x', printPanX + 'px');
             document.documentElement.style.setProperty('--print-pan-y', printPanY + 'px');
             document.documentElement.style.setProperty('--print-scale', printScale);
 
             setTimeout(() => {
                 window.print();
-                showMsg("");
+                closeMode(); // 브라우저 인쇄 창이 뜬 후, 모드를 안전하게 종료합니다.
             }, 500);
         }
 
         window.onload = () => {
-            history.replaceState({ root: true }, ''); // 초기 히스토리 세팅
+            history.replaceState({ root: true }, ''); 
             let startX = window.innerWidth / 2 - 60; let startY = window.innerHeight / 2 - 45;
             if (isNaN(startX) || startX <= 0) startX = 400;
             persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "1985", cardScale: 1, x: startX, y: startY };
