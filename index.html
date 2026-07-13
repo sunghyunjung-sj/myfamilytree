@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🌳 Ultimate Family Tree</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
             background-color: #f1f5f9;
@@ -44,6 +45,7 @@
             user-select: none;
             border: 2px solid transparent;
             z-index: 10;
+            transition: box-shadow 0.2s;
         }
         .person-card:active { z-index: 50; }
         .person-card.male { border-color: #bfdbfe; background: #eff6ff; }
@@ -84,7 +86,7 @@
             display: none;
         }
 
-        #print-selection-box {
+        #capture-selection-box {
             position: absolute;
             border: 3px dashed #ef4444;
             background-color: rgba(239, 68, 68, 0.1);
@@ -109,41 +111,21 @@
             width: max-content;
             max-width: 95vw;
         }
-
-        @media print {
-            .no-print { display: none !important; }
-            body, html { 
-                width: 1122px !important; 
-                height: 793px !important; 
-                background: white !important; 
-                overflow: hidden !important; 
-                margin: 0; padding: 0; 
-            }
-            @page { size: landscape; margin: 0; }
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            
-            #canvas-container { width: 1122px; height: 793px; position: absolute; left: 0; top: 0; transform: none !important; }
-            #workspace { 
-                transform: matrix(var(--print-scale, 1), 0, 0, var(--print-scale, 1), var(--print-pan-x, 0), var(--print-pan-y, 0)) !important; 
-                transform-origin: 0 0 !important; 
-            }
-            .person-card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; }
-        }
     </style>
 </head>
 <body>
 
-    <div id="control-panel" class="no-print border border-gray-200">
+    <div id="control-panel" class="border border-gray-200">
         <div class="flex items-center gap-2 flex-wrap justify-center w-full">
             <button onclick="createNewTree()" class="bg-gray-800 hover:bg-black text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">🆕 New Tree</button>
             <button onclick="addPerson()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">➕ Add Person</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="exportData()" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">💾 Save</button>
-            <button onclick="importData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">📂 Load</button>
+            <button onclick="exportData()" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">💾 Save Data</button>
+            <button onclick="importData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">📂 Load Data</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="startDragPrint()" id="btn-print" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs hidden sm:block">🖨️ Print Area</button>
+            <button onclick="startCapture()" id="btn-capture" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs hidden sm:block">📸 Capture PNG</button>
             <button onclick="openGuide()" class="bg-sky-100 hover:bg-sky-200 text-sky-700 font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">ℹ️ Guide</button>
         </div>
 
@@ -154,27 +136,27 @@
             <button onclick="startLinking('delete')" class="bg-red-100 hover:bg-red-200 text-red-600 font-semibold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">✂️ Unlink</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">Edit:</span>
+            <button onclick="autoLayout()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">✨ Auto-Layout</button>
+            
+            <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
             <button onclick="alignSelectedRow()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Align Y (Height)">↕️ Align</button>
             <button onclick="distributeSelectedX()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Distribute X (Spacing)">↔️ Space</button>
-            <button onclick="resizeSelected(0.1)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Increase Size">➕ Size</button>
-            <button onclick="resizeSelected(-0.1)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Decrease Size">➖ Size</button>
         </div>
     </div>
 
     <div id="status-message" class="fixed top-24 left-1/2 transform -translate-x-1/2 w-full text-center text-amber-600 font-bold z-50 pointer-events-none drop-shadow-md text-base bg-white/90 border border-amber-200 rounded-full px-5 py-1.5 w-max mx-auto hidden transition-all"></div>
 
-    <div id="print-confirm-ui" class="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 no-print bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
-        <div class="text-gray-700 font-bold mr-2">Print area selected.</div>
-        <button onclick="cancelPrint()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">Cancel</button>
-        <button onclick="executePrint()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">Print!</button>
+    <div id="capture-confirm-ui" class="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
+        <div class="text-gray-700 font-bold mr-2">Area selected.</div>
+        <button onclick="cancelCapture()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">Cancel</button>
+        <button onclick="executeCapture()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">Save Image</button>
     </div>
 
     <div id="canvas-container">
         <div id="selection-box"></div>
-        <div id="print-selection-box">
-            <div class="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-4 py-1.5 rounded-full text-sm shadow-md whitespace-nowrap">
-                📸 The area inside this box will be printed
+        <div id="capture-selection-box">
+            <div class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-4 py-1 rounded-full text-xs shadow-md whitespace-nowrap">
+                📸 Area to capture
             </div>
         </div>
         
@@ -184,7 +166,7 @@
         </div>
     </div>
 
-    <div id="edit-modal" class="hidden fixed inset-0 bg-black/60 z-[300] flex justify-center items-center backdrop-blur-sm no-print">
+    <div id="edit-modal" class="hidden fixed inset-0 bg-black/60 z-[300] flex justify-center items-center backdrop-blur-sm">
         <div class="bg-white rounded-2xl p-6 w-80 shadow-2xl">
             <h3 class="text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
                 Profile Edit
@@ -206,33 +188,28 @@
         </div>
     </div>
 
-    <div id="guide-modal" class="hidden fixed inset-0 bg-black/60 z-[400] flex justify-center items-center backdrop-blur-sm no-print p-4">
+    <div id="guide-modal" class="hidden fixed inset-0 bg-black/60 z-[400] flex justify-center items-center backdrop-blur-sm p-4">
         <div class="bg-white rounded-2xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button onclick="closeGuide()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800 font-bold text-xl">✖</button>
             <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">ℹ️ How to Use Family Tree</h2>
             
-            <div class="space-y-5 text-gray-700 text-sm">
+            <div class="space-y-4 text-gray-700 text-sm">
                 <div>
                     <h4 class="font-bold text-indigo-600 text-base mb-1">1. Multi-Select & Move 🟦</h4>
-                    <p><b>PC:</b> Hold <b>[Shift] + Drag</b> on the background to draw a blue box. Select multiple cards and move together.<br>
-                       <b>Mobile:</b> Multi-select is PC only. Touch and drag cards individually.</p>
+                    <p><b>PC:</b> Hold <b>[Shift] + Drag</b> on the background to draw a blue box. <br>
+                       <b>Mobile:</b> Touch and drag cards individually.</p>
                 </div>
-                
                 <div>
-                    <h4 class="font-bold text-pink-600 text-base mb-1">2. Smart Linking 🔗</h4>
-                    <p>Click a link button (e.g., <b>🔗 Child</b>), then click the Parent, and finally the Child. <br>
-                    <i>*Tip: Only link ONE parent. The system automatically finds the spouse!</i></p>
+                    <h4 class="font-bold text-purple-600 text-base mb-1">2. Auto-Layout ✨</h4>
+                    <p>Click <b>[✨ Auto-Layout]</b> to automatically align generations (height) and organize family spacing instantly!</p>
                 </div>
-
                 <div>
-                    <h4 class="font-bold text-amber-600 text-base mb-1">3. Pan & Zoom 🔍</h4>
-                    <p><b>PC:</b> Drag the empty background to pan. Scroll wheel to zoom.<br>
-                       <b>Mobile:</b> Touch and drag background to pan. Pinch with two fingers to zoom in/out.</p>
+                    <h4 class="font-bold text-pink-600 text-base mb-1">3. Smart Linking 🔗</h4>
+                    <p>Click a link button (e.g., <b>🔗 Child</b>), then click Parent, and finally Child. Only link ONE parent.</p>
                 </div>
-
                 <div>
-                    <h4 class="font-bold text-emerald-600 text-base mb-1">4. Edit Profile & Photo 📸</h4>
-                    <p><b>Double-click (or Double-Tap)</b> any person's card to edit Name, Birth Year, and upload Photo.</p>
+                    <h4 class="font-bold text-amber-600 text-base mb-1">4. Image Capture 📸</h4>
+                    <p>Click <b>[📸 Capture PNG]</b>, freely drag to select the exact area you want, and save it as a high-quality picture.</p>
                 </div>
             </div>
             
@@ -263,12 +240,11 @@
         let startX, startY;
         let originalPositions = {}; 
         let selectionRect = { x1: 0, y1: 0, x2: 0, y2: 0 };
-        let printRect = { x: 0, y: 0, w: 0, h: 0 };
+        let captureRect = { x: 0, y: 0, w: 0, h: 0 };
 
         let lastClickTime = 0;
         let lastClickId = null;
 
-        // Mobile Zoom state
         let isPinching = false;
         let initialPinchDist = 0;
         let initialScale = 1;
@@ -279,7 +255,19 @@
         const linesSvg = document.getElementById('lines-svg');
         const statusMsg = document.getElementById('status-message');
         const selBox = document.getElementById('selection-box');
-        const printBox = document.getElementById('print-selection-box');
+        const captureBox = document.getElementById('capture-selection-box');
+
+        // --- Helper: Get Timestamp ---
+        function getTimestampStr() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+        }
 
         function showMsg(text) {
             if(!text) { statusMsg.classList.add('hidden'); return; }
@@ -296,6 +284,88 @@
 
         function getPinchDistance(e) {
             return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        }
+
+        // --- 💡 신규 기능: Auto-Layout (세대별 자동 정렬) ---
+        function autoLayout() {
+            if(Object.keys(persons).length === 0) return;
+
+            let levels = {}; 
+            let adj = {}; 
+
+            Object.keys(persons).forEach(id => adj[id] = { spouses: [], children: [], parents: [] });
+
+            links.forEach(l => {
+                let src = l.sourceId.toString();
+                let tgt = l.targetId.toString();
+                if(l.type === 'spouse') {
+                    if(adj[src]) adj[src].spouses.push(tgt);
+                    if(adj[tgt]) adj[tgt].spouses.push(src);
+                } else if (l.type === 'child') {
+                    if(adj[src]) adj[src].children.push(tgt);
+                    if(adj[tgt]) adj[tgt].parents.push(src);
+                }
+            });
+
+            // 가장 윗세대(부모가 없는 사람) 찾기
+            let roots = Object.keys(persons).filter(id => adj[id].parents.length === 0);
+            if(roots.length === 0) roots = [Object.keys(persons)[0]];
+
+            let visited = new Set();
+            
+            // 재귀적으로 촌수(Level) 계산
+            function assignLevel(id, lvl) {
+                if(visited.has(id)) return;
+                visited.add(id);
+                levels[id] = lvl;
+
+                adj[id].spouses.forEach(sId => assignLevel(sId, lvl)); // 부부는 같은 높이
+                adj[id].children.forEach(cId => assignLevel(cId, lvl + 1)); // 자식은 한 칸 아래
+                adj[id].parents.forEach(pId => assignLevel(pId, lvl - 1)); 
+            }
+
+            roots.forEach(r => assignLevel(r, 0));
+            
+            // 연결 끊긴 사람들도 처리
+            Object.keys(persons).forEach(id => {
+                if(!visited.has(id)) assignLevel(id, 0);
+            });
+
+            // 레벨별로 그룹화
+            let levelGroups = {};
+            Object.keys(levels).forEach(id => {
+                let lvl = levels[id];
+                if(!levelGroups[lvl]) levelGroups[lvl] = [];
+                levelGroups[lvl].push(id);
+            });
+
+            // 좌표 배치 (높이는 칼같이, 좌우는 기존 순서 유지하며 예쁘게)
+            let minLevel = Math.min(...Object.keys(levelGroups).map(Number));
+            let startY = 100;
+            let spacingY = 220; // 상하 간격
+            let spacingX = 160; // 좌우 간격
+
+            Object.keys(levelGroups).sort((a,b)=>a-b).forEach(lvl => {
+                let group = levelGroups[lvl];
+                // 기존 X좌표 기준으로 정렬하여 가문 간 꼬임 방지
+                group.sort((a,b) => persons[a].x - persons[b].x); 
+
+                let totalW = (group.length - 1) * spacingX;
+                let startX = (window.innerWidth / 2) - (totalW / 2);
+                if (isNaN(startX)) startX = 400;
+
+                let actualLvl = Number(lvl) - minLevel;
+                let currentY = startY + (actualLvl * spacingY);
+
+                group.forEach((id, idx) => {
+                    persons[id].x = startX + (idx * spacingX);
+                    persons[id].y = currentY;
+                });
+            });
+
+            renderAll();
+            showMsg("✨ Auto-Layout Applied!");
+            setTimeout(() => showMsg(""), 2000);
         }
 
         function getEffectiveParentGroups() {
@@ -327,7 +397,6 @@
 
         function enforceConstraints() {
             let parentGroups = getEffectiveParentGroups();
-
             for(let pidsStr in parentGroups) {
                 let cids = parentGroups[pidsStr];
                 if (cids.length === 1) {
@@ -490,7 +559,7 @@
                 if (isNaN(startX) || startX <= 0) startX = 400;
                 if (isNaN(startY) || startY <= 0) startY = 300;
 
-                persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "1985", cardScale: 1, x: startX, y: startY };
+                persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "", cardScale: 1, x: startX, y: startY };
                 idCounter = 2;
                 
                 panX = 0; panY = 0; scale = 1; 
@@ -498,7 +567,6 @@
             }
         }
 
-        // --- 모바일 프리징 우회 터치/마우스 핸들러 ---
         function handleNodeStart(e, id) {
             e.stopPropagation(); 
             let pos = getClientPos(e);
@@ -539,13 +607,11 @@
                 }
                 return;
             }
-            if(dragMode === 'print') return;
+            if(dragMode === 'capture') return;
 
-            // 💡 프리징 버그 수정: renderAll() 대신 DOM 클래스만 변경해서 모바일 터치 유실 차단
             if(!e.shiftKey && !selectedNodeIds.has(id)) {
                 selectedNodeIds.clear();
                 selectedNodeIds.add(id);
-                
                 document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
                 let targetCard = document.getElementById(`node-${id}`);
                 if(targetCard) targetCard.classList.add('selected');
@@ -573,13 +639,13 @@
                 return;
             }
 
-            if (dragMode === 'print') {
+            if (dragMode === 'capture') {
                 startX = pos.x; startY = pos.y;
-                printBox.style.left = startX + 'px';
-                printBox.style.top = startY + 'px';
-                printBox.style.width = '0px';
-                printBox.style.height = '0px';
-                printBox.style.display = 'block';
+                captureBox.style.left = startX + 'px';
+                captureBox.style.top = startY + 'px';
+                captureBox.style.width = '0px';
+                captureBox.style.height = '0px';
+                captureBox.style.display = 'block';
                 return;
             }
 
@@ -594,8 +660,6 @@
                 dragMode = 'canvas';
                 startX = pos.x - panX;
                 startY = pos.y - panY;
-                
-                // 💡 프리징 버그 수정 2: 빈 화면 터치 시에도 renderAll 없이 테두리만 클리어
                 if(selectedNodeIds.size > 0) {
                     selectedNodeIds.clear(); 
                     document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
@@ -635,21 +699,22 @@
                 panX = pos.x - startX;
                 panY = pos.y - startY;
                 updateTransform();
-            } else if (dragMode === 'select' || dragMode === 'print') {
-                let box = dragMode === 'select' ? selBox : printBox;
+            } else if (dragMode === 'select' || dragMode === 'capture') {
+                let box = dragMode === 'select' ? selBox : captureBox;
                 let currentX = pos.x;
                 let currentY = pos.y;
                 
                 let x = Math.min(startX, currentX);
                 let y = Math.min(startY, currentY);
                 let w = Math.abs(currentX - startX);
-                let h = dragMode === 'print' ? w / 1.4142 : Math.abs(currentY - startY); 
+                // 💡 비율 강제 고정 해제 -> 자유 비율 드래그
+                let h = Math.abs(currentY - startY); 
                 
                 box.style.left = x + 'px'; box.style.top = y + 'px';
                 box.style.width = w + 'px'; box.style.height = h + 'px';
                 
                 if(dragMode === 'select') selectionRect = { x1: x, y1: y, x2: x+w, y2: y+h };
-                if(dragMode === 'print') printRect = { x, y, w, h };
+                if(dragMode === 'capture') captureRect = { x, y, w, h };
             }
         }
 
@@ -675,11 +740,11 @@
                     }
                 });
                 renderAll();
-            } else if (dragMode === 'print') {
-                if (printRect.w > 50 && printRect.h > 50) {
-                    document.getElementById('print-confirm-ui').classList.remove('hidden');
+            } else if (dragMode === 'capture') {
+                if (captureRect.w > 50 && captureRect.h > 50) {
+                    document.getElementById('capture-confirm-ui').classList.remove('hidden');
                 } else {
-                    cancelPrint();
+                    cancelCapture();
                 }
             }
             dragMode = null;
@@ -759,7 +824,7 @@
         }
 
         function openModal(id) {
-            if (dragMode === 'print' || printBox.style.display === 'block') return;
+            if (dragMode === 'capture' || captureBox.style.display === 'block') return;
             editTargetId = id;
             document.getElementById('edit-name').value = persons[id].name;
             document.getElementById('edit-birth').value = persons[id].birth || "";
@@ -807,25 +872,13 @@
         function openGuide() { document.getElementById('guide-modal').classList.remove('hidden'); }
         function closeGuide() { document.getElementById('guide-modal').classList.add('hidden'); }
 
-        // 💡 개선 사항: 저장 시 파일명에 날짜와 시간 자동 결합 (예: FamilyTree_20260712_201300.json)
         function exportData() {
             const data = JSON.stringify({ persons, links, idCounter });
             const blob = new Blob([data], { type: "application/json" });
             const url = URL.createObjectURL(blob);
-            
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            
-            const filename = `FamilyTree_${year}${month}${day}_${hours}${minutes}${seconds}.json`;
-
             const a = document.createElement('a'); 
             a.href = url; 
-            a.download = filename;
+            a.download = `FamilyTree_${getTimestampStr()}.json`;
             document.body.appendChild(a); 
             a.click(); 
             document.body.removeChild(a); 
@@ -852,45 +905,67 @@
             input.click();
         }
 
-        function startDragPrint() {
-            dragMode = 'print';
+        // --- 💡 신규 기능: Image Capture 로직 ---
+        function startCapture() {
+            dragMode = 'capture';
             document.body.style.cursor = 'crosshair';
-            showMsg("📸 Drag a box over the area you want to print!");
-            document.getElementById('btn-print').classList.replace('bg-amber-500', 'bg-gray-400');
+            showMsg("📸 Drag a box (free ratio) over the area you want to save!");
+            document.getElementById('btn-capture').classList.replace('bg-amber-500', 'bg-gray-400');
         }
 
-        function cancelPrint() {
+        function cancelCapture() {
             dragMode = null;
             document.body.style.cursor = 'default';
-            printBox.style.display = 'none';
-            document.getElementById('print-confirm-ui').classList.add('hidden');
+            captureBox.style.display = 'none';
+            document.getElementById('capture-confirm-ui').classList.add('hidden');
             showMsg("");
-            document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
+            document.getElementById('btn-capture').classList.replace('bg-gray-400', 'bg-amber-500');
         }
 
-        function executePrint() {
-            document.getElementById('print-confirm-ui').classList.add('hidden');
-            printBox.style.display = 'none';
-            document.body.style.cursor = 'default';
-            showMsg("");
-            document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
+        function executeCapture() {
+            document.getElementById('capture-confirm-ui').classList.add('hidden');
+            captureBox.style.display = 'none';
+            document.body.style.cursor = 'wait';
+            showMsg("📸 Saving image... Please wait.");
 
-            let targetW = printRect.w / scale;
-            let targetH = printRect.h / scale;
-            let targetX = (printRect.x - panX) / scale;
-            let targetY = (printRect.y - panY) / scale;
+            // 현재 배율(Scale)과 이동(Pan)을 반영한 실제 좌표 계산
+            let targetW = captureRect.w / scale;
+            let targetH = captureRect.h / scale;
+            let targetX = (captureRect.x - panX) / scale;
+            let targetY = (captureRect.y - panY) / scale;
 
-            let pageWidth = 1122; 
-            let printScale = pageWidth / targetW; 
+            // html2canvas가 정확히 캡처할 수 있도록 줌/이동을 일시적으로 초기화
+            let oldPanX = panX, oldPanY = panY, oldScale = scale;
+            panX = 0; panY = 0; scale = 1;
+            updateTransform();
 
-            let printPanX = -targetX * printScale; 
-            let printPanY = -targetY * printScale;
+            // 선택 효과 지우기
+            selectedNodeIds.clear();
+            document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
 
-            document.documentElement.style.setProperty('--print-pan-x', printPanX + 'px');
-            document.documentElement.style.setProperty('--print-pan-y', printPanY + 'px');
-            document.documentElement.style.setProperty('--print-scale', printScale);
+            setTimeout(() => {
+                html2canvas(document.getElementById('workspace'), {
+                    x: targetX,
+                    y: targetY,
+                    width: targetW,
+                    height: targetH,
+                    backgroundColor: "#f1f5f9",
+                    scale: 2 // 고화질 출력을 위해 배율 2배 설정
+                }).then(canvas => {
+                    // 화면 상태 복구
+                    panX = oldPanX; panY = oldPanY; scale = oldScale;
+                    updateTransform();
+                    document.body.style.cursor = 'default';
+                    showMsg("");
+                    document.getElementById('btn-capture').classList.replace('bg-gray-400', 'bg-amber-500');
 
-            setTimeout(() => { window.print(); }, 300);
+                    // PNG 다운로드 실행
+                    let a = document.createElement('a');
+                    a.href = canvas.toDataURL("image/png");
+                    a.download = `FamilyTree_${getTimestampStr()}.png`;
+                    a.click();
+                });
+            }, 150); // DOM이 초기화될 시간을 살짝 벌어줍니다.
         }
 
         window.onload = () => {
