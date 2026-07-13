@@ -86,7 +86,7 @@
             display: none;
         }
 
-        #capture-selection-box {
+        #print-selection-box {
             position: absolute;
             border: 3px dashed #ef4444;
             background-color: rgba(239, 68, 68, 0.1);
@@ -121,11 +121,11 @@
             <button onclick="addPerson()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">➕ Add Person</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="exportData()" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">💾 Save Data</button>
-            <button onclick="importData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">📂 Load Data</button>
+            <button onclick="exportData()" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">💾 Save Tree</button>
+            <button onclick="importData()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs">📂 Load Tree</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="startCapture()" id="btn-capture" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs hidden sm:block">📸 Capture PNG</button>
+            <button onclick="startPrint()" id="btn-print" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow transition text-xs hidden sm:block">🖨️ Print</button>
             <button onclick="openGuide()" class="bg-sky-100 hover:bg-sky-200 text-sky-700 font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">ℹ️ Guide</button>
         </div>
 
@@ -144,19 +144,19 @@
         </div>
     </div>
 
-    <div id="status-message" class="fixed top-24 left-1/2 transform -translate-x-1/2 w-full text-center text-amber-600 font-bold z-50 pointer-events-none drop-shadow-md text-base bg-white/90 border border-amber-200 rounded-full px-5 py-1.5 w-max mx-auto hidden transition-all"></div>
+    <div id="status-message" class="fixed top-36 left-1/2 transform -translate-x-1/2 w-full text-center text-amber-700 font-bold z-50 pointer-events-none drop-shadow-lg text-base bg-amber-50 border-2 border-amber-300 rounded-full px-6 py-2 w-max mx-auto hidden transition-all animate-bounce"></div>
 
-    <div id="capture-confirm-ui" class="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
-        <div class="text-gray-700 font-bold mr-2">Area selected.</div>
-        <button onclick="cancelCapture()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">Cancel</button>
-        <button onclick="executeCapture()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">Save Image</button>
+    <div id="print-confirm-ui" class="hidden fixed bottom-10 left-1/2 transform -translate-x-1/2 z-[200] flex gap-4 bg-white p-4 rounded-2xl shadow-2xl border border-gray-200 items-center">
+        <div class="text-gray-700 font-bold mr-2">구역 선택 완료</div>
+        <button onclick="cancelPrint()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full transition">취소</button>
+        <button onclick="executePrint()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg animate-pulse transition">이미지 저장</button>
     </div>
 
     <div id="canvas-container">
         <div id="selection-box"></div>
-        <div id="capture-selection-box">
+        <div id="print-selection-box">
             <div class="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-4 py-1 rounded-full text-xs shadow-md whitespace-nowrap">
-                📸 Area to capture
+                📸 인쇄(저장)할 구역
             </div>
         </div>
         
@@ -208,8 +208,8 @@
                     <p>Click a link button (e.g., <b>🔗 Child</b>), then click Parent, and finally Child. Only link ONE parent.</p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-amber-600 text-base mb-1">4. Image Capture 📸</h4>
-                    <p>Click <b>[📸 Capture PNG]</b>, freely drag to select the exact area you want, and save it as a high-quality picture.</p>
+                    <h4 class="font-bold text-amber-600 text-base mb-1">4. Print Image 🖨️</h4>
+                    <p>Click <b>[🖨️ Print]</b>, freely drag to select the exact area you want, and save it as a high-quality picture.</p>
                 </div>
             </div>
             
@@ -240,7 +240,7 @@
         let startX, startY;
         let originalPositions = {}; 
         let selectionRect = { x1: 0, y1: 0, x2: 0, y2: 0 };
-        let captureRect = { x: 0, y: 0, w: 0, h: 0 };
+        let printRect = { x: 0, y: 0, w: 0, h: 0 };
 
         let lastClickTime = 0;
         let lastClickId = null;
@@ -255,9 +255,8 @@
         const linesSvg = document.getElementById('lines-svg');
         const statusMsg = document.getElementById('status-message');
         const selBox = document.getElementById('selection-box');
-        const captureBox = document.getElementById('capture-selection-box');
+        const printBox = document.getElementById('print-selection-box');
 
-        // --- Helper: Get Timestamp ---
         function getTimestampStr() {
             const now = new Date();
             const year = now.getFullYear();
@@ -286,87 +285,100 @@
             return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
 
-        // --- 💡 수정된 기능: Auto-Layout (X축은 절대 보존, Y축만 세대별로 칼같이 맞춤) ---
+        // --- 💡 무조건 Y축(높이)만 세대별 일치시키는 완벽한 알고리즘 ---
         function autoLayout() {
             if(Object.keys(persons).length === 0) return;
 
             let levels = {}; 
-            let adj = {}; 
+            Object.keys(persons).forEach(id => levels[id] = undefined);
 
-            // 초기화
-            Object.keys(persons).forEach(id => adj[id] = { spouses: [], children: [], parents: [] });
+            let childrenMap = {};
+            let spousesMap = {};
+            let siblingsMap = {};
+
+            Object.keys(persons).forEach(id => {
+                childrenMap[id] = [];
+                spousesMap[id] = [];
+                siblingsMap[id] = [];
+            });
 
             links.forEach(l => {
                 let src = l.sourceId.toString();
                 let tgt = l.targetId.toString();
+                if(!persons[src] || !persons[tgt]) return;
+
                 if(l.type === 'spouse') {
-                    if(adj[src]) adj[src].spouses.push(tgt);
-                    if(adj[tgt]) adj[tgt].spouses.push(src);
+                    spousesMap[src].push(tgt);
+                    spousesMap[tgt].push(src);
                 } else if (l.type === 'child') {
-                    if(adj[src]) adj[src].children.push(tgt);
-                    if(adj[tgt]) adj[tgt].parents.push(src);
+                    childrenMap[src].push(tgt);
+                } else if (l.type === 'sibling') {
+                    siblingsMap[src].push(tgt);
+                    siblingsMap[tgt].push(src);
                 }
             });
 
-            // 가장 윗세대(부모가 없는 사람) 찾기
-            let roots = Object.keys(persons).filter(id => adj[id].parents.length === 0);
-            if(roots.length === 0) roots = [Object.keys(persons)[0]]; // 순환 참조 대비 방어 코드
-
-            // 💡 세대 꼬임 방지를 위한 BFS(너비 우선 탐색) 방식 도입
-            let queue = [];
-            roots.forEach(r => {
-                levels[r] = 0;
-                queue.push(r);
-            });
-
-            while(queue.length > 0) {
-                let curr = queue.shift();
-                let currLvl = levels[curr];
-
-                // 1. 배우자는 무조건 나랑 같은 층(Level)
-                adj[curr].spouses.forEach(s => {
-                    if(levels[s] === undefined) {
-                        levels[s] = currLvl;
-                        queue.push(s);
+            // 형제 선이 없더라도 같은 부모를 공유하면 형제 그룹으로 강제 바인딩
+            let parentGroups = getEffectiveParentGroups();
+            for(let pidsStr in parentGroups) {
+                let cids = parentGroups[pidsStr];
+                for(let i=0; i<cids.length; i++) {
+                    for(let j=i+1; j<cids.length; j++) {
+                        let c1 = cids[i].toString();
+                        let c2 = cids[j].toString();
+                        if(!siblingsMap[c1].includes(c2)) siblingsMap[c1].push(c2);
+                        if(!siblingsMap[c2].includes(c1)) siblingsMap[c2].push(c1);
                     }
-                });
-                // 2. 자식은 무조건 한 층 아래(Level + 1)
-                adj[curr].children.forEach(c => {
-                    if(levels[c] === undefined) {
-                        levels[c] = currLvl + 1;
-                        queue.push(c);
-                    }
-                });
-                // 3. (혹시 모를 역방향) 부모는 무조건 한 층 위(Level - 1)
-                adj[curr].parents.forEach(p => {
-                    if(levels[p] === undefined) {
-                        levels[p] = currLvl - 1;
-                        queue.push(p);
-                    }
-                });
+                }
             }
 
-            // 아예 연결 안 된 고립된 카드들은 기본 Level 0으로 지정
+            // 최상단 뿌리 세대(부모가 없는 노드) 색출하여 Level 0 부여
             Object.keys(persons).forEach(id => {
-                if(levels[id] === undefined) {
-                    levels[id] = 0;
-                }
+                let hasParents = links.some(l => l.type === 'child' && l.targetId.toString() === id);
+                if(!hasParents) levels[id] = 0;
             });
 
-            // 💡 핵심: X축은 1픽셀도 건드리지 않고, Y축(높이)만 레벨에 맞춰서 변경
-            let minLevel = Math.min(...Object.values(levels));
-            let startY = 150;     // 최상단 세대의 Y 좌표
-            let spacingY = 220;   // 세대 간의 세로 높이 간격
+            if (Object.values(levels).every(v => v === undefined)) {
+                levels[Object.keys(persons)[0]] = 0;
+            }
 
+            // 관계망을 따라 모든 세대 레벨 동기화 (Relaxation 방식)
+            for (let pass = 0; pass < 100; pass++) {
+                let changed = false;
+                Object.keys(persons).forEach(id => {
+                    let currLvl = levels[id];
+                    if(currLvl !== undefined) {
+                        spousesMap[id].forEach(sId => { if(levels[sId] !== currLvl) { levels[sId] = currLvl; changed = true; } });
+                        siblingsMap[id].forEach(sId => { if(levels[sId] !== currLvl) { levels[sId] = currLvl; changed = true; } });
+                        childrenMap[id].forEach(cId => { if(levels[cId] !== currLvl + 1) { levels[cId] = currLvl + 1; changed = true; } });
+                    } else {
+                        childrenMap[id].forEach(cId => {
+                            if(levels[cId] !== undefined && levels[id] === undefined) {
+                                levels[id] = levels[cId] - 1;
+                                changed = true;
+                            }
+                        });
+                    }
+                });
+                if(!changed) break;
+            }
+
+            // 고립된 노드 방어 처리
+            Object.keys(persons).forEach(id => { if(levels[id] === undefined) levels[id] = 0; });
+
+            let minLevel = Math.min(...Object.values(levels));
+            let startY = 150;     
+            let spacingY = 220;   
+
+            // 💡 X축은 완전히 보존하고 Y축만 세대별 정렬
             Object.keys(levels).forEach(id => {
                 let actualLvl = levels[id] - minLevel;
                 persons[id].y = startY + (actualLvl * spacingY); 
-                // persons[id].x 는 건드리지 않음!
             });
 
             renderAll();
-            showMsg("✨ Auto-Layout: Y-axis aligned perfectly!");
-            setTimeout(() => showMsg(""), 2000);
+            showMsg("✨ Auto-Layout: 모든 세대의 높이가 완벽하게 정렬되었습니다!");
+            setTimeout(() => showMsg(""), 2500);
         }
 
         function getEffectiveParentGroups() {
@@ -455,7 +467,6 @@
 
         function drawLines() {
             let svgContent = '';
-            
             let spouseLinks = links.filter(l => l.type === 'spouse');
             let siblingLinks = links.filter(l => l.type === 'sibling');
             
@@ -479,13 +490,10 @@
             });
 
             let parentGroups = getEffectiveParentGroups();
-
             for(let pidsStr in parentGroups) {
                 let cids = parentGroups[pidsStr];
                 let pids = pidsStr.split(',').map(Number);
-                
-                let sumX = 0, sumY = 0, validP = 0;
-                let lowestParentY = 0; 
+                let sumX = 0, sumY = 0, validP = 0, lowestParentY = 0; 
 
                 pids.forEach(pid => {
                     if(persons[pid]) { 
@@ -499,30 +507,25 @@
                 
                 let pMidX = sumX / validP;
                 let pMidY = (validP === 1) ? lowestParentY : (sumY / validP);
-
                 let childCoords = cids.map(cid => persons[cid] ? {x: persons[cid].x + 60, y: persons[cid].y} : null).filter(Boolean);
                 if(childCoords.length === 0) continue;
 
                 let minCX = Math.min(...childCoords.map(c => c.x));
                 let maxCX = Math.max(...childCoords.map(c => c.x));
                 let minCY = Math.min(...childCoords.map(c => c.y));
-                
                 let dropY = minCY - 30; 
                 if (dropY <= pMidY) dropY = pMidY + 20;
 
                 svgContent += `<path d="M ${pMidX} ${pMidY} L ${pMidX} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
-                
                 let spineMin = Math.min(pMidX, minCX);
                 let spineMax = Math.max(pMidX, maxCX);
                 if (spineMin !== spineMax) {
                     svgContent += `<path d="M ${spineMin} ${dropY} L ${spineMax} ${dropY}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
                 }
-                
                 childCoords.forEach(c => {
                     svgContent += `<path d="M ${c.x} ${dropY} L ${c.x} ${c.y}" stroke="#94a3b8" stroke-width="3" fill="none" />`;
                 });
             }
-
             linesSvg.innerHTML = svgContent;
         }
 
@@ -550,19 +553,12 @@
 
         function createNewTree() {
             if(confirm("Are you sure you want to start a NEW family tree? Any unsaved changes will be lost.")) {
-                persons = {};
-                links = [];
-                idCounter = 1;
-                selectedNodeIds.clear();
-                
+                persons = {}; links = []; idCounter = 1; selectedNodeIds.clear();
                 let startX = window.innerWidth / 2 - 60;
                 let startY = window.innerHeight / 2 - 45;
                 if (isNaN(startX) || startX <= 0) startX = 400;
-                if (isNaN(startY) || startY <= 0) startY = 300;
-
                 persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "", cardScale: 1, x: startX, y: startY };
                 idCounter = 2;
-                
                 panX = 0; panY = 0; scale = 1; 
                 renderAll();
             }
@@ -571,61 +567,44 @@
         function handleNodeStart(e, id) {
             e.stopPropagation(); 
             let pos = getClientPos(e);
-            
             let now = Date.now();
-            if (lastClickId === id && (now - lastClickTime) < 300) {
-                openModal(id);
-                return;
-            }
-            lastClickTime = now;
-            lastClickId = id;
+            if (lastClickId === id && (now - lastClickTime) < 300) { openModal(id); return; }
+            lastClickTime = now; lastClickId = id;
 
             if (linkMode) {
                 if (!linkStepId) {
                     linkStepId = id;
-                    if(linkMode === 'delete') showMsg("✂️ Select the second person to REMOVE the link.");
-                    else showMsg("🔗 Select the second person to connect.");
+                    if(linkMode === 'delete') showMsg("✂️ Delete Mode: 두 번째 사람을 선택하면 링크가 삭제됩니다.");
+                    else showMsg("🔗 연결할 두 번째 사람을 선택해 주세요.");
                     renderAll(); 
                 } else {
                     if (linkStepId !== id) {
                         if (linkMode === 'delete') {
                             links = links.filter(l => !( (l.sourceId === linkStepId && l.targetId === id) || (l.targetId === linkStepId && l.sourceId === id) ));
                         } else {
-                            let source = linkStepId;
-                            let target = id;
-                            if (linkMode === 'child' && persons[source].y > persons[target].y) {
-                                source = id;
-                                target = linkStepId;
-                            }
-
+                            let source = linkStepId, target = id;
+                            if (linkMode === 'child' && persons[source].y > persons[target].y) { source = id; target = linkStepId; }
                             let exists = links.some(l => l.type === linkMode && ((l.sourceId === source && l.targetId === target) || (l.targetId === source && l.sourceId === target)));
-                            if (!exists) {
-                                links.push({ sourceId: source, targetId: target, type: linkMode });
-                            }
+                            if (!exists) links.push({ sourceId: source, targetId: target, type: linkMode });
                         }
                     }
                     cancelLinking();
                 }
                 return;
             }
-            if(dragMode === 'capture') return;
+            if(dragMode === 'print') return;
 
             if(!e.shiftKey && !selectedNodeIds.has(id)) {
-                selectedNodeIds.clear();
-                selectedNodeIds.add(id);
+                selectedNodeIds.clear(); selectedNodeIds.add(id);
                 document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
                 let targetCard = document.getElementById(`node-${id}`);
                 if(targetCard) targetCard.classList.add('selected');
             }
 
             dragMode = 'node';
-            startX = pos.x / scale;
-            startY = pos.y / scale;
-            
+            startX = pos.x / scale; startY = pos.y / scale;
             originalPositions = {};
-            selectedNodeIds.forEach(nId => {
-                originalPositions[nId] = { x: persons[nId].x, y: persons[nId].y };
-            });
+            selectedNodeIds.forEach(nId => { originalPositions[nId] = { x: persons[nId].x, y: persons[nId].y }; });
         }
 
         function handleCanvasStart(e) {
@@ -633,20 +612,14 @@
             let pos = getClientPos(e);
             
             if (e.touches && e.touches.length === 2) {
-                isPinching = true;
-                initialPinchDist = getPinchDistance(e);
-                initialScale = scale;
-                dragMode = null;
-                return;
+                isPinching = true; initialPinchDist = getPinchDistance(e); initialScale = scale; dragMode = null; return;
             }
 
-            if (dragMode === 'capture') {
+            if (dragMode === 'print') {
                 startX = pos.x; startY = pos.y;
-                captureBox.style.left = startX + 'px';
-                captureBox.style.top = startY + 'px';
-                captureBox.style.width = '0px';
-                captureBox.style.height = '0px';
-                captureBox.style.display = 'block';
+                printBox.style.left = startX + 'px'; printBox.style.top = startY + 'px';
+                printBox.style.width = '0px'; printBox.style.height = '0px';
+                printBox.style.display = 'block';
                 return;
             }
 
@@ -655,12 +628,9 @@
                 startX = pos.x; startY = pos.y;
                 selectionRect = { x1: startX, y1: startY, x2: startX, y2: startY };
                 selBox.style.left = startX + 'px'; selBox.style.top = startY + 'px';
-                selBox.style.width = '0px'; selBox.style.height = '0px';
-                selBox.style.display = 'block';
+                selBox.style.width = '0px'; selBox.style.height = '0px'; selBox.style.display = 'block';
             } else { 
-                dragMode = 'canvas';
-                startX = pos.x - panX;
-                startY = pos.y - panY;
+                dragMode = 'canvas'; startX = pos.x - panX; startY = pos.y - panY;
                 if(selectedNodeIds.size > 0) {
                     selectedNodeIds.clear(); 
                     document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
@@ -669,52 +639,36 @@
         }
 
         container.onmousedown = handleCanvasStart;
-        container.ontouchstart = (e) => {
-            if(e.touches.length > 2) return; 
-            handleCanvasStart(e);
-        };
+        container.ontouchstart = (e) => { if(e.touches.length > 2) return; handleCanvasStart(e); };
 
         function handleGlobalMove(e) {
             if (isPinching && e.touches && e.touches.length === 2) {
                 let currentDist = getPinchDistance(e);
                 let delta = currentDist / initialPinchDist;
                 scale = Math.min(Math.max(0.1, initialScale * delta), 3);
-                updateTransform();
-                return;
+                updateTransform(); return;
             }
 
             if (!dragMode) return;
             let pos = getClientPos(e);
 
             if (dragMode === 'node') {
-                let dx = pos.x / scale - startX;
-                let dy = pos.y / scale - startY;
+                let dx = pos.x / scale - startX; let dy = pos.y / scale - startY;
                 selectedNodeIds.forEach(nId => {
-                    persons[nId].x = originalPositions[nId].x + dx;
-                    persons[nId].y = originalPositions[nId].y + dy;
+                    persons[nId].x = originalPositions[nId].x + dx; persons[nId].y = originalPositions[nId].y + dy;
                     document.getElementById(`node-${nId}`).style.left = persons[nId].x + 'px';
                     document.getElementById(`node-${nId}`).style.top = persons[nId].y + 'px';
                 });
                 drawLines(); 
             } else if (dragMode === 'canvas') {
-                panX = pos.x - startX;
-                panY = pos.y - startY;
-                updateTransform();
-            } else if (dragMode === 'select' || dragMode === 'capture') {
-                let box = dragMode === 'select' ? selBox : captureBox;
-                let currentX = pos.x;
-                let currentY = pos.y;
-                
-                let x = Math.min(startX, currentX);
-                let y = Math.min(startY, currentY);
-                let w = Math.abs(currentX - startX);
-                let h = Math.abs(currentY - startY); 
-                
-                box.style.left = x + 'px'; box.style.top = y + 'px';
-                box.style.width = w + 'px'; box.style.height = h + 'px';
-                
+                panX = pos.x - startX; panY = pos.y - startY; updateTransform();
+            } else if (dragMode === 'select' || dragMode === 'print') {
+                let box = dragMode === 'select' ? selBox : printBox;
+                let x = Math.min(startX, pos.x); let y = Math.min(startY, pos.y);
+                let w = Math.abs(pos.x - startX); let h = Math.abs(pos.y - startY); 
+                box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.width = w + 'px'; box.style.height = h + 'px';
                 if(dragMode === 'select') selectionRect = { x1: x, y1: y, x2: x+w, y2: y+h };
-                if(dragMode === 'capture') captureRect = { x, y, w, h };
+                if(dragMode === 'print') printRect = { x, y, w, h };
             }
         }
 
@@ -726,67 +680,47 @@
             if (dragMode === 'node') {
                 renderAll();
             } else if (dragMode === 'select') {
-                selBox.style.display = 'none';
-                selectedNodeIds.clear();
+                selBox.style.display = 'none'; selectedNodeIds.clear();
                 Object.values(persons).forEach(p => {
-                    let screenX = p.x * scale + panX;
-                    let screenY = p.y * scale + panY;
-                    let screenW = 120 * scale;
-                    let screenH = 145 * scale;
-                    let cx = screenX + screenW/2;
-                    let cy = screenY + screenH/2;
-                    if(cx >= selectionRect.x1 && cx <= selectionRect.x2 && cy >= selectionRect.y1 && cy <= selectionRect.y2) {
-                        selectedNodeIds.add(p.id);
-                    }
+                    let cx = (p.x * scale + panX) + (120 * scale)/2; let cy = (p.y * scale + panY) + (145 * scale)/2;
+                    if(cx >= selectionRect.x1 && cx <= selectionRect.x2 && cy >= selectionRect.y1 && cy <= selectionRect.y2) selectedNodeIds.add(p.id);
                 });
                 renderAll();
-            } else if (dragMode === 'capture') {
-                if (captureRect.w > 50 && captureRect.h > 50) {
-                    document.getElementById('capture-confirm-ui').classList.remove('hidden');
-                } else {
-                    cancelCapture();
-                }
+            } else if (dragMode === 'print') {
+                if (printRect.w > 50 && printRect.h > 50) {
+                    document.getElementById('print-confirm-ui').classList.remove('hidden');
+                    showMsg(""); // 구역 선택 완료되면 가독성을 위해 상단 문구는 지움
+                } else { cancelPrint(); }
             }
             dragMode = null;
         }
 
-        window.onmouseup = handleGlobalEnd;
-        window.ontouchend = handleGlobalEnd;
+        window.onmouseup = handleGlobalEnd; window.ontouchend = handleGlobalEnd;
 
         container.onwheel = (e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? 0.9 : 1.1;
-            scale = Math.min(Math.max(0.1, scale * delta), 3); 
-            updateTransform();
+            e.preventDefault(); const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            scale = Math.min(Math.max(0.1, scale * delta), 3); updateTransform();
         };
 
         function alignSelectedRow() {
             if(selectedNodeIds.size < 2) { alert("Please select 2 or more people (Shift + Drag)."); return; }
-            let sumY = 0;
-            selectedNodeIds.forEach(id => sumY += persons[id].y);
-            let avgY = sumY / selectedNodeIds.size;
-            selectedNodeIds.forEach(id => persons[id].y = avgY);
+            let sumY = 0; selectedNodeIds.forEach(id => sumY += persons[id].y);
+            let avgY = sumY / selectedNodeIds.size; selectedNodeIds.forEach(id => persons[id].y = avgY);
             renderAll();
         }
 
         function distributeSelectedX() {
             if(selectedNodeIds.size < 3) { alert("Please select 3 or more people (Shift + Drag)."); return; }
             let arr = Array.from(selectedNodeIds).map(id => persons[id]).sort((a, b) => a.x - b.x);
-            let minX = arr[0].x;
-            let maxX = arr[arr.length-1].x;
-            let step = (maxX - minX) / (arr.length - 1);
-            
-            for(let i = 1; i < arr.length - 1; i++) {
-                arr[i].x = minX + (step * i);
-            }
+            let minX = arr[0].x; let maxX = arr[arr.length-1].x; let step = (maxX - minX) / (arr.length - 1);
+            for(let i = 1; i < arr.length - 1; i++) arr[i].x = minX + (step * i);
             renderAll();
         }
 
         function resizeSelected(delta) {
             if(selectedNodeIds.size === 0) { alert("Please select people to resize."); return; }
             selectedNodeIds.forEach(id => {
-                let current = persons[id].cardScale || 1;
-                persons[id].cardScale = Math.max(0.4, Math.min(2.0, current + delta));
+                let current = persons[id].cardScale || 1; persons[id].cardScale = Math.max(0.4, Math.min(2.0, current + delta));
             });
             renderAll();
         }
@@ -799,192 +733,103 @@
                     if (!exists) links.push({ sourceId: arr[i], targetId: arr[i+1], type: 'sibling' });
                 }
                 renderAll();
-            } else {
-                startLinking('sibling');
-            }
+            } else { startLinking('sibling'); }
         }
 
         function startLinking(type) {
-            linkMode = type;
-            linkStepId = null;
-            selectedNodeIds.clear(); 
-            renderAll();
+            linkMode = type; linkStepId = null; selectedNodeIds.clear(); renderAll();
             document.body.style.cursor = 'crosshair';
-            if(type === 'delete') showMsg("✂️ Delete Mode: Click the first person.");
-            else if(type === 'spouse') showMsg("🔗 Click Husband, then click Wife.");
-            else if(type === 'sibling') showMsg("🔗 Click Sibling 1, then Sibling 2.");
-            else if(type === 'child') showMsg("🔗 Click ONE Parent, then click Child.");
+            if(type === 'delete') showMsg("✂️ Unlink Mode: 첫 번째 카드를 클릭하세요.");
+            else if(type === 'spouse') showMsg("🔗 Spouse 연결: 남편 카드를 누른 후 아내 카드를 누르세요.");
+            else if(type === 'sibling') showMsg("🔗 Sibling 연결: 첫 번째 형제 카드를 누른 후 두 번째 형제 카드를 누르세요.");
+            else if(type === 'child') showMsg("🔗 Child 연결: 부모 카드를 누른 후 자녀 카드를 누르세요.");
         }
         
-        function cancelLinking() {
-            linkMode = null; linkStepId = null;
-            document.body.style.cursor = 'default';
-            showMsg("");
-            renderAll();
-        }
-
-        function openModal(id) {
-            if (dragMode === 'capture' || captureBox.style.display === 'block') return;
-            editTargetId = id;
-            document.getElementById('edit-name').value = persons[id].name;
-            document.getElementById('edit-birth').value = persons[id].birth || "";
-            document.getElementById('edit-gender').value = persons[id].gender;
-            document.getElementById('edit-modal').classList.remove('hidden');
-        }
-
+        function cancelLinking() { linkMode = null; linkStepId = null; document.body.style.cursor = 'default'; showMsg(""); renderAll(); }
+        function openModal(id) { if (dragMode === 'print' || printBox.style.display === 'block') return; editTargetId = id; document.getElementById('edit-name').value = persons[id].name; document.getElementById('edit-birth').value = persons[id].birth || ""; document.getElementById('edit-gender').value = persons[id].gender; document.getElementById('edit-modal').classList.remove('hidden'); }
         function closeModal() { document.getElementById('edit-modal').classList.add('hidden'); }
-
-        function saveModal() {
-            if (editTargetId) {
-                persons[editTargetId].name = document.getElementById('edit-name').value || "Unknown";
-                persons[editTargetId].birth = document.getElementById('edit-birth').value;
-                persons[editTargetId].gender = document.getElementById('edit-gender').value;
-            }
-            closeModal();
-            renderAll();
-        }
-
-        function deletePerson() {
-            if(confirm("Are you sure you want to delete this person?")) {
-                delete persons[editTargetId];
-                links = links.filter(l => l.sourceId !== editTargetId && l.targetId !== editTargetId);
-                selectedNodeIds.delete(editTargetId);
-                closeModal();
-                renderAll();
-            }
-        }
-
-        function triggerModalPhotoUpload() {
-            const input = document.getElementById('img-upload');
-            input.onchange = (ev) => {
-                if (ev.target.files[0]) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => { 
-                        if(editTargetId) { persons[editTargetId].photo = e.target.result; renderAll(); }
-                    };
-                    reader.readAsDataURL(ev.target.files[0]);
-                }
-                input.value = ''; 
-            };
-            input.click();
-        }
-
+        function saveModal() { if (editTargetId) { persons[editTargetId].name = document.getElementById('edit-name').value || "Unknown"; persons[editTargetId].birth = document.getElementById('edit-birth').value; persons[editTargetId].gender = document.getElementById('edit-gender').value; } closeModal(); renderAll(); }
+        
+        function deletePerson() { if(confirm("Are you sure you want to delete this person?")) { delete persons[editTargetId]; links = links.filter(l => l.sourceId !== editTargetId && l.targetId !== editTargetId); selectedNodeIds.delete(editTargetId); closeModal(); renderAll(); } }
+        function triggerModalPhotoUpload() { const input = document.getElementById('img-upload'); input.onchange = (ev) => { if (ev.target.files[0]) { const reader = new FileReader(); reader.onload = (e) => { if(editTargetId) { persons[editTargetId].photo = e.target.result; renderAll(); } }; reader.readAsDataURL(ev.target.files[0]); } input.value = ''; }; input.click(); }
         function openGuide() { document.getElementById('guide-modal').classList.remove('hidden'); }
         function closeGuide() { document.getElementById('guide-modal').classList.add('hidden'); }
 
         function exportData() {
-            const data = JSON.stringify({ persons, links, idCounter });
-            const blob = new Blob([data], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); 
-            a.href = url; 
-            a.download = `FamilyTree_${getTimestampStr()}.json`;
-            document.body.appendChild(a); 
-            a.click(); 
-            document.body.removeChild(a); 
-            URL.revokeObjectURL(url);
+            const data = JSON.stringify({ persons, links, idCounter }); const blob = new Blob([data], { type: "application/json" }); const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `FamilyTree_${getTimestampStr()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
         }
 
         function importData() {
-            const input = document.createElement('input');
-            input.type = 'file'; input.accept = '.json';
+            const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
             input.onchange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        let loaded = JSON.parse(event.target.result);
-                        persons = loaded.persons; links = loaded.links; idCounter = loaded.idCounter;
-                        selectedNodeIds.clear();
-                        renderAll();
-                    } catch (error) { alert("❌ Invalid file format."); }
-                };
-                reader.readAsText(file);
-            };
-            input.click();
+                const file = e.target.files[0]; if (!file) return;
+                const reader = new FileReader(); reader.onload = (event) => { try { let loaded = JSON.parse(event.target.result); persons = loaded.persons; links = loaded.links; idCounter = loaded.idCounter; selectedNodeIds.clear(); renderAll(); } catch (error) { alert("❌ Invalid file format."); } }; reader.readAsText(file);
+            }; input.click();
         }
 
-        function startCapture() {
-            dragMode = 'capture';
+        // --- 💡 신규 Print (이미지 캡처) 기획 반영 ---
+        function startPrint() {
+            dragMode = 'print';
             document.body.style.cursor = 'crosshair';
-            showMsg("📸 Drag a box over the area you want to save!");
-            document.getElementById('btn-capture').classList.replace('bg-amber-500', 'bg-gray-400');
+            // 버튼 클릭 시 문구가 무조건 강하게 출력됨
+            showMsg("🖨️ 인쇄(저장)할 구역을 마우스나 터치로 드래그해서 네모 박스를 그려주세요!");
+            document.getElementById('btn-print').classList.replace('bg-amber-500', 'bg-gray-400');
         }
 
-        function cancelCapture() {
-            dragMode = null;
-            document.body.style.cursor = 'default';
-            captureBox.style.display = 'none';
-            document.getElementById('capture-confirm-ui').classList.add('hidden');
-            showMsg("");
-            document.getElementById('btn-capture').classList.replace('bg-gray-400', 'bg-amber-500');
+        function cancelPrint() {
+            dragMode = null; document.body.style.cursor = 'default'; printBox.style.display = 'none';
+            document.getElementById('print-confirm-ui').classList.add('hidden'); showMsg("");
+            document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
         }
 
-        // 💡 수정된 기능: 캡처 전 SVG 영역을 강제로 넓혀서 선이 잘리는 것을 원천 차단
-        function executeCapture() {
-            document.getElementById('capture-confirm-ui').classList.add('hidden');
-            captureBox.style.display = 'none';
-            document.body.style.cursor = 'wait';
-            showMsg("📸 Saving image... Please wait.");
+        function executePrint() {
+            document.getElementById('print-confirm-ui').classList.add('hidden');
+            printBox.style.display = 'none'; document.body.style.cursor = 'wait';
+            showMsg("🖨️ 고화질 이미지 스캔 중... 잠시만 기다려주세요.");
 
-            let targetW = captureRect.w / scale;
-            let targetH = captureRect.h / scale;
-            let targetX = (captureRect.x - panX) / scale;
-            let targetY = (captureRect.y - panY) / scale;
+            let targetW = printRect.w / scale; let targetH = printRect.h / scale;
+            let targetX = (printRect.x - panX) / scale; let targetY = (printRect.y - panY) / scale;
 
             let oldPanX = panX, oldPanY = panY, oldScale = scale;
-            panX = 0; panY = 0; scale = 1;
-            updateTransform();
+            panX = 0; panY = 0; scale = 1; updateTransform();
 
             selectedNodeIds.clear();
             document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
 
-            // 💡 SVG 잘림 방지: 도화지 크기를 캡처 구역 이상으로 아주 크게 임시 확장
+            // 💡 연결선 짤림 완전 방지: 캡처 영역을 완전히 포용하도록 도화지 크기를 강제 대형 확장
             let svgLines = document.getElementById('lines-svg');
-            let oldSvgWidth = svgLines.style.width;
-            let oldSvgHeight = svgLines.style.height;
+            let oldSvgWidth = svgLines.style.width; let oldSvgHeight = svgLines.style.height;
             
-            let expandW = Math.max(window.innerWidth, targetX + targetW + 1500);
-            let expandH = Math.max(window.innerHeight, targetY + targetH + 1500);
-            svgLines.style.width = expandW + 'px';
-            svgLines.style.height = expandH + 'px';
+            let expandW = Math.max(window.innerWidth, targetX + targetW + 2000);
+            let expandH = Math.max(window.innerHeight, targetY + targetH + 2000);
+            svgLines.style.width = expandW + 'px'; svgLines.style.height = expandH + 'px';
 
             setTimeout(() => {
                 html2canvas(document.getElementById('workspace'), {
-                    x: targetX,
-                    y: targetY,
-                    width: targetW,
-                    height: targetH,
-                    backgroundColor: "#f1f5f9",
-                    scale: 2 // 화질 2배
+                    x: targetX, y: targetY, width: targetW, height: targetH,
+                    backgroundColor: "#f1f5f9", scale: 2 // 선명한 2배 화질
                 }).then(canvas => {
-                    // 원상 복구
-                    svgLines.style.width = oldSvgWidth;
-                    svgLines.style.height = oldSvgHeight;
-                    panX = oldPanX; panY = oldPanY; scale = oldScale;
-                    updateTransform();
+                    // 원래 상태로 완벽 복구
+                    svgLines.style.width = oldSvgWidth; svgLines.style.height = oldSvgHeight;
+                    panX = oldPanX; panY = oldPanY; scale = oldScale; updateTransform();
                     
-                    document.body.style.cursor = 'default';
-                    showMsg("");
-                    document.getElementById('btn-capture').classList.replace('bg-gray-400', 'bg-amber-500');
+                    document.body.style.cursor = 'default'; showMsg("");
+                    document.getElementById('btn-print').classList.replace('bg-gray-400', 'bg-amber-500');
 
-                    // 다운로드
                     let a = document.createElement('a');
                     a.href = canvas.toDataURL("image/png");
                     a.download = `FamilyTree_${getTimestampStr()}.png`;
                     a.click();
                 });
-            }, 250); // DOM이 확장될 시간을 조금 더 확보
+            }, 300);
         }
 
         window.onload = () => {
-            let startX = window.innerWidth / 2 - 60;
-            let startY = window.innerHeight / 2 - 45;
+            let startX = window.innerWidth / 2 - 60; let startY = window.innerHeight / 2 - 45;
             if (isNaN(startX) || startX <= 0) startX = 400;
             persons[1] = { id: 1, name: "Me", gender: "M", photo: null, birth: "1985", cardScale: 1, x: startX, y: startY };
-            idCounter = 2;
-            renderAll();
+            idCounter = 2; renderAll();
         };
     </script>
 </body>
