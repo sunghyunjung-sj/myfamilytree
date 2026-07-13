@@ -136,7 +136,7 @@
             <button onclick="startLinking('delete')" class="bg-red-100 hover:bg-red-200 text-red-600 font-semibold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">✂️ Unlink</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
-            <button onclick="autoLayout()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs">✨ Auto-Layout</button>
+            <button onclick="autoLayout()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-2.5 rounded-full shadow-sm transition text-xs" title="Align Y-axis (Heights) only">✨ Auto-Layout</button>
             
             <div class="w-px bg-gray-300 h-4 mx-0.5"></div>
             <button onclick="alignSelectedRow()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-2 rounded-full shadow-sm transition text-xs" title="Align Y (Height)">↕️ Align</button>
@@ -201,7 +201,7 @@
                 </div>
                 <div>
                     <h4 class="font-bold text-purple-600 text-base mb-1">2. Auto-Layout ✨</h4>
-                    <p>Click <b>[✨ Auto-Layout]</b> to automatically align generations (height) and organize family spacing instantly!</p>
+                    <p>Click <b>[✨ Auto-Layout]</b> to automatically align ONLY the heights (Y-axis) based on generations. Your horizontal spacing (X-axis) will stay perfectly intact!</p>
                 </div>
                 <div>
                     <h4 class="font-bold text-pink-600 text-base mb-1">3. Smart Linking 🔗</h4>
@@ -286,13 +286,14 @@
             return Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
 
-        // --- 💡 신규 기능: Auto-Layout (세대별 자동 정렬) ---
+        // --- 💡 수정된 기능: Auto-Layout (X축은 절대 보존, Y축만 세대별로 칼같이 맞춤) ---
         function autoLayout() {
             if(Object.keys(persons).length === 0) return;
 
             let levels = {}; 
             let adj = {}; 
 
+            // 초기화
             Object.keys(persons).forEach(id => adj[id] = { spouses: [], children: [], parents: [] });
 
             links.forEach(l => {
@@ -309,62 +310,62 @@
 
             // 가장 윗세대(부모가 없는 사람) 찾기
             let roots = Object.keys(persons).filter(id => adj[id].parents.length === 0);
-            if(roots.length === 0) roots = [Object.keys(persons)[0]];
+            if(roots.length === 0) roots = [Object.keys(persons)[0]]; // 순환 참조 대비 방어 코드
 
-            let visited = new Set();
-            
-            // 재귀적으로 촌수(Level) 계산
-            function assignLevel(id, lvl) {
-                if(visited.has(id)) return;
-                visited.add(id);
-                levels[id] = lvl;
+            // 💡 세대 꼬임 방지를 위한 BFS(너비 우선 탐색) 방식 도입
+            let queue = [];
+            roots.forEach(r => {
+                levels[r] = 0;
+                queue.push(r);
+            });
 
-                adj[id].spouses.forEach(sId => assignLevel(sId, lvl)); // 부부는 같은 높이
-                adj[id].children.forEach(cId => assignLevel(cId, lvl + 1)); // 자식은 한 칸 아래
-                adj[id].parents.forEach(pId => assignLevel(pId, lvl - 1)); 
+            while(queue.length > 0) {
+                let curr = queue.shift();
+                let currLvl = levels[curr];
+
+                // 1. 배우자는 무조건 나랑 같은 층(Level)
+                adj[curr].spouses.forEach(s => {
+                    if(levels[s] === undefined) {
+                        levels[s] = currLvl;
+                        queue.push(s);
+                    }
+                });
+                // 2. 자식은 무조건 한 층 아래(Level + 1)
+                adj[curr].children.forEach(c => {
+                    if(levels[c] === undefined) {
+                        levels[c] = currLvl + 1;
+                        queue.push(c);
+                    }
+                });
+                // 3. (혹시 모를 역방향) 부모는 무조건 한 층 위(Level - 1)
+                adj[curr].parents.forEach(p => {
+                    if(levels[p] === undefined) {
+                        levels[p] = currLvl - 1;
+                        queue.push(p);
+                    }
+                });
             }
 
-            roots.forEach(r => assignLevel(r, 0));
-            
-            // 연결 끊긴 사람들도 처리
+            // 아예 연결 안 된 고립된 카드들은 기본 Level 0으로 지정
             Object.keys(persons).forEach(id => {
-                if(!visited.has(id)) assignLevel(id, 0);
+                if(levels[id] === undefined) {
+                    levels[id] = 0;
+                }
             });
 
-            // 레벨별로 그룹화
-            let levelGroups = {};
+            // 💡 핵심: X축은 1픽셀도 건드리지 않고, Y축(높이)만 레벨에 맞춰서 변경
+            let minLevel = Math.min(...Object.values(levels));
+            let startY = 150;     // 최상단 세대의 Y 좌표
+            let spacingY = 220;   // 세대 간의 세로 높이 간격
+
             Object.keys(levels).forEach(id => {
-                let lvl = levels[id];
-                if(!levelGroups[lvl]) levelGroups[lvl] = [];
-                levelGroups[lvl].push(id);
-            });
-
-            // 좌표 배치 (높이는 칼같이, 좌우는 기존 순서 유지하며 예쁘게)
-            let minLevel = Math.min(...Object.keys(levelGroups).map(Number));
-            let startY = 100;
-            let spacingY = 220; // 상하 간격
-            let spacingX = 160; // 좌우 간격
-
-            Object.keys(levelGroups).sort((a,b)=>a-b).forEach(lvl => {
-                let group = levelGroups[lvl];
-                // 기존 X좌표 기준으로 정렬하여 가문 간 꼬임 방지
-                group.sort((a,b) => persons[a].x - persons[b].x); 
-
-                let totalW = (group.length - 1) * spacingX;
-                let startX = (window.innerWidth / 2) - (totalW / 2);
-                if (isNaN(startX)) startX = 400;
-
-                let actualLvl = Number(lvl) - minLevel;
-                let currentY = startY + (actualLvl * spacingY);
-
-                group.forEach((id, idx) => {
-                    persons[id].x = startX + (idx * spacingX);
-                    persons[id].y = currentY;
-                });
+                let actualLvl = levels[id] - minLevel;
+                persons[id].y = startY + (actualLvl * spacingY); 
+                // persons[id].x 는 건드리지 않음!
             });
 
             renderAll();
-            showMsg("✨ Auto-Layout Applied!");
+            showMsg("✨ Auto-Layout: Y-axis aligned perfectly!");
             setTimeout(() => showMsg(""), 2000);
         }
 
@@ -707,7 +708,6 @@
                 let x = Math.min(startX, currentX);
                 let y = Math.min(startY, currentY);
                 let w = Math.abs(currentX - startX);
-                // 💡 비율 강제 고정 해제 -> 자유 비율 드래그
                 let h = Math.abs(currentY - startY); 
                 
                 box.style.left = x + 'px'; box.style.top = y + 'px';
@@ -905,11 +905,10 @@
             input.click();
         }
 
-        // --- 💡 신규 기능: Image Capture 로직 ---
         function startCapture() {
             dragMode = 'capture';
             document.body.style.cursor = 'crosshair';
-            showMsg("📸 Drag a box (free ratio) over the area you want to save!");
+            showMsg("📸 Drag a box over the area you want to save!");
             document.getElementById('btn-capture').classList.replace('bg-amber-500', 'bg-gray-400');
         }
 
@@ -922,26 +921,34 @@
             document.getElementById('btn-capture').classList.replace('bg-gray-400', 'bg-amber-500');
         }
 
+        // 💡 수정된 기능: 캡처 전 SVG 영역을 강제로 넓혀서 선이 잘리는 것을 원천 차단
         function executeCapture() {
             document.getElementById('capture-confirm-ui').classList.add('hidden');
             captureBox.style.display = 'none';
             document.body.style.cursor = 'wait';
             showMsg("📸 Saving image... Please wait.");
 
-            // 현재 배율(Scale)과 이동(Pan)을 반영한 실제 좌표 계산
             let targetW = captureRect.w / scale;
             let targetH = captureRect.h / scale;
             let targetX = (captureRect.x - panX) / scale;
             let targetY = (captureRect.y - panY) / scale;
 
-            // html2canvas가 정확히 캡처할 수 있도록 줌/이동을 일시적으로 초기화
             let oldPanX = panX, oldPanY = panY, oldScale = scale;
             panX = 0; panY = 0; scale = 1;
             updateTransform();
 
-            // 선택 효과 지우기
             selectedNodeIds.clear();
             document.querySelectorAll('.person-card').forEach(card => card.classList.remove('selected'));
+
+            // 💡 SVG 잘림 방지: 도화지 크기를 캡처 구역 이상으로 아주 크게 임시 확장
+            let svgLines = document.getElementById('lines-svg');
+            let oldSvgWidth = svgLines.style.width;
+            let oldSvgHeight = svgLines.style.height;
+            
+            let expandW = Math.max(window.innerWidth, targetX + targetW + 1500);
+            let expandH = Math.max(window.innerHeight, targetY + targetH + 1500);
+            svgLines.style.width = expandW + 'px';
+            svgLines.style.height = expandH + 'px';
 
             setTimeout(() => {
                 html2canvas(document.getElementById('workspace'), {
@@ -950,22 +957,25 @@
                     width: targetW,
                     height: targetH,
                     backgroundColor: "#f1f5f9",
-                    scale: 2 // 고화질 출력을 위해 배율 2배 설정
+                    scale: 2 // 화질 2배
                 }).then(canvas => {
-                    // 화면 상태 복구
+                    // 원상 복구
+                    svgLines.style.width = oldSvgWidth;
+                    svgLines.style.height = oldSvgHeight;
                     panX = oldPanX; panY = oldPanY; scale = oldScale;
                     updateTransform();
+                    
                     document.body.style.cursor = 'default';
                     showMsg("");
                     document.getElementById('btn-capture').classList.replace('bg-gray-400', 'bg-amber-500');
 
-                    // PNG 다운로드 실행
+                    // 다운로드
                     let a = document.createElement('a');
                     a.href = canvas.toDataURL("image/png");
                     a.download = `FamilyTree_${getTimestampStr()}.png`;
                     a.click();
                 });
-            }, 150); // DOM이 초기화될 시간을 살짝 벌어줍니다.
+            }, 250); // DOM이 확장될 시간을 조금 더 확보
         }
 
         window.onload = () => {
